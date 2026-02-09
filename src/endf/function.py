@@ -262,6 +262,48 @@ class Tabulated1D:
 
         return np.concatenate(([0.], np.cumsum(partial_sum)))
 
+    def to_hdf5(self, group, name='xy'):
+        """Write tabulated function to an HDF5 group
+
+        Parameters
+        ----------
+        group : h5py.Group
+            HDF5 group to write to
+        name : str
+            Name of the dataset to create
+
+        """
+        dataset = group.create_dataset(name, data=np.vstack(
+            [self.x, self.y]))
+        dataset.attrs['type'] = np.bytes_(type(self).__name__)
+        dataset.attrs['breakpoints'] = self.breakpoints
+        dataset.attrs['interpolation'] = self.interpolation
+
+    @classmethod
+    def from_hdf5(cls, dataset):
+        """Generate tabulated function from an HDF5 dataset
+
+        Parameters
+        ----------
+        dataset : h5py.Dataset
+            Dataset to read from
+
+        Returns
+        -------
+        Tabulated1D
+            Function read from dataset
+
+        """
+        if dataset.attrs['type'].decode() != cls.__name__:
+            raise ValueError("Expected an HDF5 attribute 'type' equal to '"
+                             + cls.__name__ + "'")
+
+        x = dataset[0, :]
+        y = dataset[1, :]
+        breakpoints = dataset.attrs['breakpoints']
+        interpolation = dataset.attrs['interpolation']
+        return cls(x, y, breakpoints, interpolation)
+
     @classmethod
     def from_ace(cls, ace, idx=0, convert_units=True):
         """Create a Tabulated1D object from an ACE table.
