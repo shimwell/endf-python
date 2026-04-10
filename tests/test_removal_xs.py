@@ -123,3 +123,64 @@ class TestRemovalXS:
         val = removal(1e6)
         assert np.isfinite(val)
         assert val > 0
+
+
+# --- IncidentPhoton.removal_xs tests ---
+
+@pytest.fixture
+def hydrogen():
+    return endf.IncidentPhoton.from_endf('tests/photoat-001_H_000.endf')
+
+
+class TestPhotonRemovalXS:
+    def test_returns_tabulated1d(self, hydrogen):
+        removal = hydrogen.removal_xs()
+        assert isinstance(removal, Tabulated1D)
+
+    def test_less_than_total(self, hydrogen):
+        """Removal XS should be less than or equal to total XS."""
+        removal = hydrogen.removal_xs(mu_cutoff=0.0)
+        total_xs = hydrogen[501].xs
+        total_vals = total_xs(removal.x)
+        assert np.all(removal.y <= total_vals + 1e-10)
+
+    def test_mu_cutoff_minus1(self, hydrogen):
+        """With mu_cutoff=-1, all coherent is 'forward', so removal = total - coherent."""
+        removal = hydrogen.removal_xs(mu_cutoff=-1.0)
+        total_xs = hydrogen[501].xs
+        coherent_xs = hydrogen[502].xs
+        expected = total_xs(removal.x) - coherent_xs(removal.x)
+        np.testing.assert_allclose(removal.y, expected, atol=1e-10)
+
+    def test_mu_cutoff_plus1(self, hydrogen):
+        """With mu_cutoff=1, no coherent is 'forward', so removal = total."""
+        removal = hydrogen.removal_xs(mu_cutoff=1.0)
+        total_xs = hydrogen[501].xs
+        expected = total_xs(removal.x)
+        np.testing.assert_allclose(removal.y, expected, atol=1e-10)
+
+    def test_callable(self, hydrogen):
+        """Returned Tabulated1D should be callable at arbitrary energies."""
+        removal = hydrogen.removal_xs()
+        val = removal(1e4)
+        assert np.isfinite(val)
+        assert val > 0
+
+    def test_no_form_factor_isotropic_fallback(self):
+        """When no form factor is present, assume isotropic scattering."""
+        from endf.incident_photon import IncidentPhoton, PhotonReaction
+
+        data = IncidentPhoton(1)
+        energies = np.array([1e3, 1e4, 1e5])
+
+        rx_total = PhotonReaction(501, xs=Tabulated1D(energies, [10.0, 5.0, 2.0]))
+        rx_coh = PhotonReaction(502, xs=Tabulated1D(energies, [4.0, 2.0, 0.5]))
+        # No scattering_factor set (defaults to None)
+
+        data.reactions[501] = rx_total
+        data.reactions[502] = rx_coh
+
+        removal = data.removal_xs(mu_cutoff=0.0)
+        # Isotropic forward fraction = (1 - 0) / 2 = 0.5
+        expected = np.array([10.0, 5.0, 2.0]) - 0.5 * np.array([4.0, 2.0, 0.5])
+        np.testing.assert_allclose(removal.y, expected)

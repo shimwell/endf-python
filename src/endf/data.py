@@ -79,6 +79,9 @@ K_BOLTZMANN = 8.617333262e-5
 
 EV_PER_MEV = 1.0e6
 
+# Planck constant times speed of light in [eV*Angstrom]
+HC_EV_ANGSTROM = 12398.41984
+
 # Regex for GNDS nuclide names (used in zam function)
 _GNDS_NAME_RE = re.compile(r'([A-Zn][a-z]*)(\d+)((?:_[em]\d+)?)')
 

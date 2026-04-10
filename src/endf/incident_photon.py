@@ -3,7 +3,7 @@ from typing import Union, List, Optional
 
 import numpy as np
 
-from .data import ATOMIC_SYMBOL, EV_PER_MEV, SUM_RULES
+from .data import ATOMIC_SYMBOL, EV_PER_MEV, HC_EV_ANGSTROM, SUM_RULES
 from .material import Material
 from .fileutils import PathLike
 from .function import Tabulated1D
@@ -554,6 +554,91 @@ class IncidentPhoton:
     @property
     def name(self) -> str:
         return ATOMIC_SYMBOL[self.atomic_number]
+
+    def removal_xs(self, mu_cutoff: float = 0.0) -> Tabulated1D:
+        """Compute the removal cross section.
+
+        The removal cross section is defined as:
+
+        .. math::
+
+            \\sigma_r(E) = \\sigma_t(E) - f_{\\text{fwd}}(E) \\, \\sigma_{\\text{coh}}(E)
+
+        where :math:`f_{\\text{fwd}}(E)` is the fraction of coherent (Rayleigh)
+        scattering into the forward cone :math:`[\\mu_0, 1]` and :math:`\\mu_0 =
+        \\cos\\theta_0` is the cosine of the forward cone half-angle. The
+        forward fraction is computed by numerically integrating the Thomson-
+        weighted form factor:
+
+        .. math::
+
+            f_{\\text{fwd}}(E) = \\frac{\\int_{\\mu_0}^{1} (1+\\mu^2)
+            [F(x,Z)]^2 \\, d\\mu}{\\int_{-1}^{1} (1+\\mu^2) [F(x,Z)]^2
+            \\, d\\mu}
+
+        where :math:`x(E,\\mu) = E \\sqrt{(1-\\mu)/2} \\;/\\; hc`.
+
+        Parameters
+        ----------
+        mu_cutoff
+            Cosine of the forward cone half-angle. Must be in [-1, 1].
+            A value of 0.0 (the default) corresponds to the forward hemisphere.
+
+        Returns
+        -------
+        Tabulated1D
+            Removal cross section as a function of incident energy in eV.
+
+        """
+        if 502 not in self:
+            raise ValueError(
+                "Coherent scattering cross section (MT=502) not available."
+            )
+
+        coherent_rx = self[502]
+        coherent_xs = coherent_rx.xs
+        energies = coherent_xs.x
+
+        # Get total cross section: use MT=501 if available, else sum components
+        if 501 in self:
+            total_vals = self[501].xs(energies)
+        else:
+            total_vals = np.copy(coherent_xs.y)
+            for mt in (504, 516, 517, 522):
+                if mt in self:
+                    total_vals += self[mt].xs(energies)
+
+        # Compute forward fraction of coherent scattering
+        form_factor = coherent_rx.scattering_factor
+        if form_factor is not None:
+            n_mu = 500
+            mu_full = np.linspace(-1, 1, n_mu)
+            mu_fwd = np.linspace(mu_cutoff, 1, n_mu)
+
+            def _integrate(mu_grid):
+                # x(E, mu) = E * sqrt((1 - mu) / 2) / hc  [Angstrom^-1]
+                x_2d = (energies[:, np.newaxis]
+                        * np.sqrt((1 - mu_grid[np.newaxis, :]) / 2)
+                        / HC_EV_ANGSTROM)
+                ff = form_factor(x_2d.ravel()).reshape(x_2d.shape)
+                w = (1 + mu_grid[np.newaxis, :] ** 2) * ff ** 2
+                return np.trapezoid(w, mu_grid, axis=1)
+
+            total_integral = _integrate(mu_full)
+            fwd_integral = _integrate(mu_fwd)
+
+            fwd_frac = np.where(
+                total_integral > 0,
+                fwd_integral / total_integral,
+                (1.0 - mu_cutoff) / 2.0
+            )
+        else:
+            # No form factor: assume isotropic
+            fwd_frac = np.full(len(energies), (1.0 - mu_cutoff) / 2.0)
+
+        removal_vals = total_vals - fwd_frac * coherent_xs.y
+
+        return Tabulated1D(energies, removal_vals)
 
     def _get_reaction_components(self, MT: int) -> List[int]:
         """Determine what reactions make up a redundant reaction.
