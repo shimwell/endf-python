@@ -8,6 +8,7 @@ from warnings import warn
 import numpy as np
 from numpy.polynomial import Legendre
 
+from .function import Tabulated1D
 from .records import get_head_record, get_cont_record, get_tab2_record, \
     get_tab1_record, get_list_record
 
@@ -140,4 +141,46 @@ class AngleDistribution:
             mu = mu_leg + mu_tab
 
         return cls(energy, mu)
+
+    def forward_fraction(self, mu_cutoff: float = 0.0) -> np.ndarray:
+        """Fraction of scattering into the forward cone at each energy.
+
+        The forward cone is defined as scattering cosines in the range
+        [mu_cutoff, 1]. This is useful for computing removal cross sections
+        used in point kernel shielding codes.
+
+        Parameters
+        ----------
+        mu_cutoff
+            Cosine of the forward cone half-angle. Must be in [-1, 1].
+            A value of 0.0 corresponds to the forward hemisphere (theta < 90
+            degrees).
+
+        Returns
+        -------
+        numpy.ndarray
+            Forward-scattered fraction at each energy in :attr:`energy`
+
+        """
+        fractions = np.empty(len(self.energy))
+
+        for i, mu_i in enumerate(self.mu):
+            if isinstance(mu_i, Legendre):
+                # Stored coefficients are [a_0, a_1, ...] (ENDF convention).
+                # The actual PDF is p(mu) = sum_l (2l+1)/2 * a_l * P_l(mu).
+                l_vals = np.arange(len(mu_i.coef))
+                pdf_coeffs = (2 * l_vals + 1) / 2 * mu_i.coef
+                pdf_leg = Legendre(pdf_coeffs)
+                antideriv = pdf_leg.integ()
+                fractions[i] = antideriv(1.0) - antideriv(mu_cutoff)
+
+            elif isinstance(mu_i, Tabulated1D):
+                # Build CDF from the integral of the tabulated PDF
+                cdf = mu_i.integral()
+                cdf_func = Tabulated1D(mu_i.x, cdf)
+                cdf_at_cutoff = cdf_func(mu_cutoff)
+                total = cdf[-1]
+                fractions[i] = (total - cdf_at_cutoff) / total
+
+        return fractions
 
