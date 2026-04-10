@@ -52,6 +52,15 @@ neutron_file.write_text(json.dumps(neutron_out, indent=2))
 print(f"Wrote {len(neutron_removal.x)} points to {neutron_file}")
 
 # --- photon removal cross section for Fe ------------------------------------
+#
+# For photons the same mu_cutoff logic applies, but the forward-scattered
+# component is coherent (Rayleigh) scattering rather than elastic neutron
+# scattering:
+#
+#   sigma_r(E) = sigma_total(E) - f_forward(E) * sigma_coherent(E)
+#
+# f_forward is derived from the Thomson-weighted atomic form factor.
+# mu_cutoff=0.0 again means the forward hemisphere is not "removed".
 photon_data = endf.IncidentPhoton.from_endf(PHOTON_ENDF)
 photon_removal = photon_data.removal_xs(mu_cutoff=0.0)
 
