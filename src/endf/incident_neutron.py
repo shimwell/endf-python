@@ -203,6 +203,72 @@ class IncidentNeutron:
     def atomic_symbol(self) -> str:
         return ATOMIC_SYMBOL[self.atomic_number]
 
+    def removal_xs(self, temperature: str = '0K', mu_cutoff: float = 0.0) -> Tabulated1D:
+        """Compute the removal cross section.
+
+        The removal cross section is defined as:
+
+        .. math::
+
+            \\sigma_r(E) = \\sigma_t(E) - f_{\\text{fwd}}(E) \\, \\sigma_{\\text{el}}(E)
+
+        where :math:`f_{\\text{fwd}}(E)` is the fraction of elastic scattering
+        into the forward cone :math:`[\\mu_0, 1]` and :math:`\\mu_0 =
+        \\cos\\theta_0` is the cosine of the forward cone half-angle. This is
+        used in point kernel shielding codes where forward-scattered neutrons
+        are considered to remain in the uncollided beam.
+
+        Parameters
+        ----------
+        temperature
+            Temperature key for cross section lookup (e.g., ``'0K'``,
+            ``'294K'``).
+        mu_cutoff
+            Cosine of the forward cone half-angle. Must be in [-1, 1].
+            A value of 0.0 (the default) corresponds to the forward hemisphere.
+
+        Returns
+        -------
+        Tabulated1D
+            Removal cross section as a function of incident energy in eV.
+
+        """
+        if 1 not in self:
+            raise ValueError("Total cross section (MT=1) not available.")
+        if 2 not in self:
+            raise ValueError("Elastic scattering cross section (MT=2) not available.")
+
+        total_xs = self[1].xs[temperature]
+        elastic_xs = self[2].xs[temperature]
+
+        # Get elastic angular distribution
+        elastic_rx = self[2]
+        has_angle = (
+            elastic_rx.products
+            and elastic_rx.products[0].distribution
+            and hasattr(elastic_rx.products[0].distribution[0], 'angle')
+        )
+
+        if has_angle:
+            angle_dist = elastic_rx.products[0].distribution[0].angle
+        else:
+            angle_dist = None
+
+        if angle_dist is not None and len(angle_dist.energy) > 0:
+            # Use the angular distribution energy grid
+            energies = angle_dist.energy
+            fwd_frac = angle_dist.forward_fraction(mu_cutoff)
+        else:
+            # Isotropic: use elastic XS energy grid with constant fraction
+            energies = elastic_xs.x
+            fwd_frac = np.full(len(energies), (1.0 - mu_cutoff) / 2.0)
+
+        total_vals = total_xs(energies)
+        elastic_vals = elastic_xs(energies)
+        removal_vals = total_vals - fwd_frac * elastic_vals
+
+        return Tabulated1D(energies, removal_vals)
+
     def _get_reaction_components(self, MT: int) -> List[int]:
         """Determine what reactions make up redundant reaction.
 
