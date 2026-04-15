@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: MIT
 
 from __future__ import annotations
-from typing import Union, List
+from collections import defaultdict
+from typing import Union, List, Dict, Tuple
+from warnings import warn
 
 import numpy as np
 
@@ -12,6 +14,46 @@ from .fileutils import PathLike
 from .function import Tabulated1D
 from .reaction import Reaction, REACTION_MT
 from . import ace
+
+
+def _cascade_gammas(
+    level_energy: float,
+    level_transitions: Dict[float, List[Tuple[float, float, float]]],
+    memo: dict,
+) -> List[Tuple[float, float]]:
+    """Compute all gamma lines emitted during a cascade from *level_energy*.
+
+    The level transition map has the form
+    ``{level_energy: [(target_energy, transition_prob, gamma_prob), ...]}``.
+    *gamma_prob* (GP) accounts for internal conversion — the probability that
+    the transition actually emits a photon rather than a conversion electron.
+
+    Returns a list of ``(gamma_energy, yield)`` pairs.  The same gamma energy
+    may appear more than once if it is reachable via different cascade paths;
+    the caller should consolidate them.
+    """
+    if level_energy in memo:
+        return memo[level_energy]
+
+    trans = level_transitions.get(level_energy)
+    if trans is None or level_energy <= 0.0:
+        memo[level_energy] = []
+        return []
+
+    result: List[Tuple[float, float]] = []
+    for target_e, tp, gp in trans:
+        gamma_e = level_energy - target_e
+        if gamma_e > 0.0:
+            result.append((gamma_e, tp * gp))
+        # Continue cascade from the target level
+        if target_e > 0.0:
+            for sub_gamma_e, sub_yield in _cascade_gammas(
+                target_e, level_transitions, memo
+            ):
+                result.append((sub_gamma_e, tp * sub_yield))
+
+    memo[level_energy] = result
+    return result
 
 
 
@@ -55,6 +97,7 @@ class IncidentNeutron:
         self.mass_number = mass_number
         self.metastable = metastable
         self.reactions = {}
+        self._material = None
 
     @classmethod
     def from_endf(cls, filename_or_mat: Union[PathLike, Material]) -> IncidentNeutron:
@@ -84,6 +127,10 @@ class IncidentNeutron:
         for MF, MT in material.sections:
             if MF == 3:
                 data.reactions[MT] = Reaction.from_endf(MT, material)
+
+        # Store material for access to gamma production data (MF=12/13)
+        data._material = material
+
         return data
 
     @classmethod
@@ -268,6 +315,365 @@ class IncidentNeutron:
         removal_vals = total_vals - fwd_frac * elastic_vals
 
         return Tabulated1D(energies, removal_vals)
+
+    def gamma_production_xs(self, temperature: str = '0K') -> Tabulated1D:
+        """Compute the total gamma production cross section.
+
+        This sums the photon production from every reaction that has gamma
+        data in the ENDF evaluation.  Two ENDF file types contribute:
+
+        * **MF=12** (photon production multiplicities, ``LO=1``): the
+          production cross section for reaction *MT* is
+          ``Y(E) × σ_MT(E)`` where *Y* is the total photon yield and
+          *σ_MT* comes from MF=3.
+        * **MF=13** (photon production cross sections): the production
+          cross section is given directly.
+
+        Transition-probability data (MF=12, ``LO=2``) is not yet
+        supported and will be skipped with a warning.
+
+        Parameters
+        ----------
+        temperature
+            Temperature key for the reaction cross section lookup (e.g.,
+            ``'0K'``, ``'294K'``).  Only used for MF=12 contributions
+            where the multiplicity must be multiplied by the MF=3 cross
+            section.
+
+        Returns
+        -------
+        Tabulated1D
+            Total gamma production cross section as a function of
+            incident neutron energy in eV.
+
+        """
+        if self._material is None:
+            raise ValueError(
+                "Gamma production data requires the ENDF material. "
+                "Use IncidentNeutron.from_endf() to load data."
+            )
+
+        material = self._material
+        contributions = []
+
+        for MF, MT in material.sections:
+            if MF == 12:
+                mf12 = material[12, MT]
+                if mf12['LO'] == 1:
+                    # Total photon yield
+                    if mf12['NK'] > 1:
+                        total_yield = mf12['Y']
+                    else:
+                        total_yield = mf12['multiplicities'][0]['y']
+
+                    # Multiply yield by reaction cross section from MF=3
+                    if MT not in self.reactions:
+                        continue
+                    rxn_xs = self[MT].xs[temperature]
+                    energies = total_yield.x
+                    production = total_yield.y * rxn_xs(energies)
+                    contributions.append(Tabulated1D(energies, production))
+                else:
+                    warn(
+                        f"MF=12, MT={MT}: transition probability data "
+                        f"(LO={mf12['LO']}) is not supported for gamma "
+                        "production cross sections and will be skipped."
+                    )
+
+            elif MF == 13:
+                mf13 = material[13, MT]
+                if mf13['NK'] > 1:
+                    contributions.append(mf13['sigma_total'])
+                else:
+                    contributions.append(mf13['photons'][0]['sigma'])
+
+        if not contributions:
+            raise ValueError(
+                "No gamma production data (MF=12 or MF=13) found in "
+                "this evaluation."
+            )
+
+        # Single contribution — return it directly
+        if len(contributions) == 1:
+            return contributions[0]
+
+        # Multiple contributions — sum on a union energy grid
+        all_energies = np.concatenate([c.x for c in contributions])
+        energies = np.unique(all_energies)
+
+        total = np.zeros_like(energies)
+        for contrib in contributions:
+            vals = np.zeros_like(energies)
+            mask = (energies >= contrib.x[0]) & (energies <= contrib.x[-1])
+            if np.any(mask):
+                vals[mask] = contrib(energies[mask])
+            total += vals
+
+        return Tabulated1D(energies, total)
+
+    def gamma_line_production_xs(
+        self, temperature: str = '0K'
+    ) -> List[dict]:
+        """Compute production cross sections for each discrete gamma line.
+
+        For every photon-producing reaction in the evaluation, this method
+        determines the discrete gamma energies emitted and the corresponding
+        production cross section as a function of incident neutron energy.
+        Contributions from different reactions that produce the same gamma
+        energy are summed.
+
+        Three ENDF data representations are handled:
+
+        * **MF=12, LO=2** — nuclear level transition probabilities.  A full
+          cascade calculation is performed so that secondary gammas from
+          intermediate levels are included.  The internal-conversion
+          coefficient (GP) is applied when present.
+        * **MF=12, LO=1** — photon multiplicities for discrete lines
+          (those with ``Eg > 0``).
+        * **MF=13** — photon production cross sections for discrete lines
+          (those with ``EG > 0``).
+
+        Continuous-spectrum contributions (``Eg = 0`` in MF=12 LO=1 or
+        MF=13, and MF=15 data) are not included; use
+        :meth:`gamma_production_xs` for the total (discrete + continuum)
+        production rate.
+
+        Parameters
+        ----------
+        temperature
+            Temperature key for the reaction cross section lookup (e.g.,
+            ``'0K'``, ``'294K'``).
+
+        Returns
+        -------
+        list of dict
+            Each element describes one discrete gamma line::
+
+                {
+                    'gamma_energy_eV': float,
+                    'neutron_energy_eV': numpy.ndarray,
+                    'production_xs_barns': numpy.ndarray,
+                }
+
+            The list is sorted by ascending gamma energy.
+
+        """
+        if self._material is None:
+            raise ValueError(
+                "Gamma production data requires the ENDF material. "
+                "Use IncidentNeutron.from_endf() to load data."
+            )
+
+        material = self._material
+
+        # --- Step 1: build level transition map from MF=12 LO=2 sections ---
+        # {level_energy: [(target_energy, transition_prob, gamma_prob), ...]}
+        level_transitions: Dict[float, List[Tuple[float, float, float]]] = {}
+        for MF, MT in material.sections:
+            if MF == 12:
+                mf12 = material[12, MT]
+                if mf12.get('LO') == 2:
+                    level_e = mf12['ES_NS']
+                    lg = mf12.get('LG', 1)
+                    trans = []
+                    for t in mf12['transitions']:
+                        gp = t.get('GP', 1.0) if lg == 2 else 1.0
+                        trans.append((t['ES'], t['TP'], gp))
+                    level_transitions[level_e] = trans
+
+        # --- Step 2: collect per-line contributions ---
+        # gamma_energy -> list of (neutron_energy_array, production_xs_array)
+        line_contribs: Dict[float, list] = defaultdict(list)
+
+        # 2a: MF=12 LO=2 — discrete levels with cascade
+        cascade_memo: dict = {}
+        for MF, MT in material.sections:
+            if MF == 12:
+                mf12 = material[12, MT]
+                if mf12.get('LO') != 2:
+                    continue
+                if MT not in self.reactions:
+                    continue
+
+                level_e = mf12['ES_NS']
+                gammas = _cascade_gammas(level_e, level_transitions,
+                                        cascade_memo)
+
+                # Consolidate yields for the same gamma energy within
+                # this reaction before multiplying by the cross section
+                yields: Dict[float, float] = {}
+                for gamma_e, y in gammas:
+                    yields[gamma_e] = yields.get(gamma_e, 0.0) + y
+
+                rxn_xs = self[MT].xs[temperature]
+                for gamma_e, total_yield in yields.items():
+                    line_contribs[gamma_e].append(
+                        (rxn_xs.x.copy(), total_yield * rxn_xs.y)
+                    )
+
+        # 2b: MF=12 LO=1 — discrete multiplicities (Eg > 0)
+        for MF, MT in material.sections:
+            if MF == 12:
+                mf12 = material[12, MT]
+                if mf12.get('LO') != 1:
+                    continue
+                if MT not in self.reactions:
+                    continue
+                rxn_xs = self[MT].xs[temperature]
+                for mult in mf12['multiplicities']:
+                    eg = mult['Eg']
+                    if eg > 0.0:
+                        y = mult['y']
+                        production = y.y * rxn_xs(y.x)
+                        line_contribs[eg].append((y.x.copy(), production))
+
+        # 2c: MF=13 — direct production cross sections (EG > 0)
+        for MF, MT in material.sections:
+            if MF == 13:
+                mf13 = material[13, MT]
+                for photon in mf13['photons']:
+                    eg = photon['EG']
+                    if eg > 0.0:
+                        sigma = photon['sigma']
+                        line_contribs[eg].append(
+                            (sigma.x.copy(), sigma.y.copy())
+                        )
+
+        # --- Step 3: consolidate contributions per gamma energy ---
+        result = []
+        for gamma_e in sorted(line_contribs):
+            contribs = line_contribs[gamma_e]
+
+            if len(contribs) == 1:
+                e_grid, xs = contribs[0]
+            else:
+                # Sum on union energy grid
+                all_e = np.concatenate([c[0] for c in contribs])
+                e_grid = np.unique(all_e)
+                xs = np.zeros_like(e_grid)
+                for e_arr, xs_arr in contribs:
+                    tab = Tabulated1D(e_arr, xs_arr)
+                    mask = (e_grid >= e_arr[0]) & (e_grid <= e_arr[-1])
+                    if np.any(mask):
+                        xs[mask] += tab(e_grid[mask])
+
+            result.append({
+                'gamma_energy_eV': gamma_e,
+                'neutron_energy_eV': e_grid,
+                'production_xs_barns': np.maximum(xs, 0.0),
+            })
+
+        return result
+
+    def gamma_continuum_data(
+        self, temperature: str = '0K'
+    ) -> List[dict]:
+        """Extract continuous gamma spectrum data from MF=15.
+
+        For each reaction with continuous photon energy spectra (MF=15),
+        this method returns the total continuum production cross section
+        and the gamma energy probability density at each tabulated
+        incident neutron energy.
+
+        The production cross section is derived from the continuum
+        multiplicity in MF=12 (entries with ``Eg = 0``) multiplied by the
+        MF=3 reaction cross section, or from continuum entries in MF=13
+        (``EG = 0``).
+
+        The gamma spectrum at each neutron energy is the normalised
+        probability density ``g(E_γ | E_n)`` in units of 1/eV.  The
+        differential production cross section is:
+
+        .. math::
+
+            \\frac{d\\sigma}{dE_\\gamma}(E_n, E_\\gamma)
+            = \\sigma_{\\text{prod}}(E_n)\\, g(E_\\gamma \\mid E_n)
+
+        Parameters
+        ----------
+        temperature
+            Temperature key for the reaction cross section lookup.
+
+        Returns
+        -------
+        list of dict
+            Each element describes one reaction's continuum::
+
+                {
+                    'mt': int,
+                    'production_neutron_energy_eV': numpy.ndarray,
+                    'production_xs_barns': numpy.ndarray,
+                    'spectra': [
+                        {
+                            'neutron_energy_eV': float,
+                            'gamma_energy_eV': numpy.ndarray,
+                            'pdf_per_eV': numpy.ndarray,
+                        },
+                        ...
+                    ],
+                }
+
+        """
+        if self._material is None:
+            raise ValueError(
+                "Gamma production data requires the ENDF material. "
+                "Use IncidentNeutron.from_endf() to load data."
+            )
+
+        material = self._material
+        results = []
+
+        for MF, MT in material.sections:
+            if MF != 15:
+                continue
+
+            mf15 = material[15, MT]
+
+            # --- Determine the continuum production cross section ---
+            production_xs = None
+
+            # Check MF=12 for continuum multiplicity (Eg = 0)
+            if (12, MT) in material:
+                mf12 = material[12, MT]
+                if mf12.get('LO') == 1 and MT in self.reactions:
+                    for mult in mf12['multiplicities']:
+                        if mult['Eg'] == 0.0:
+                            rxn_xs = self[MT].xs[temperature]
+                            energies = mult['y'].x
+                            prod = mult['y'].y * rxn_xs(energies)
+                            production_xs = Tabulated1D(
+                                energies, np.maximum(prod, 0.0))
+                            break
+
+            # Fallback: check MF=13 for continuum production XS (EG = 0)
+            if production_xs is None and (13, MT) in material:
+                mf13 = material[13, MT]
+                for photon in mf13['photons']:
+                    if photon['EG'] == 0.0:
+                        production_xs = photon['sigma']
+                        break
+
+            if production_xs is None:
+                continue
+
+            # --- Extract spectra from MF=15 subsections ---
+            spectra = []
+            for sub in mf15['subsections']:
+                for k in range(sub['NE']):
+                    spectra.append({
+                        'neutron_energy_eV': float(sub['E'][k]),
+                        'gamma_energy_eV': sub['g'][k].x.copy(),
+                        'pdf_per_eV': sub['g'][k].y.copy(),
+                    })
+
+            results.append({
+                'mt': MT,
+                'production_neutron_energy_eV': production_xs.x.copy(),
+                'production_xs_barns': production_xs.y.copy(),
+                'spectra': spectra,
+            })
+
+        return results
 
     def _get_reaction_components(self, MT: int) -> List[int]:
         """Determine what reactions make up redundant reaction.
