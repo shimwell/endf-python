@@ -19,6 +19,7 @@ except ImportError:
 from numpy import empty, searchsorted
 
 from ._checkvalue import check_type
+from ._univariate import Univariate
 
 
 __all__ = [
@@ -50,6 +51,12 @@ class Nuclide:
 
         self.decay_modes = []
         self.reactions = []
+
+        # Decay radiation source distributions keyed by particle type
+        # (``"photon"``, ``"electron"``, …). Each value is a Univariate (a
+        # ``Discrete`` or ``Tabular`` from ``endf._univariate``) whose
+        # ordinate values are emission rates (decays⁻¹·s⁻¹).
+        self.sources = {}
 
         self._yield_data = None
 
@@ -110,6 +117,13 @@ class Nuclide:
             branching_ratio = float(decay_elem.get('branching_ratio'))
             nuc.decay_modes.append(DecayTuple(d_type, target, branching_ratio))
 
+        # Decay radiation sources
+        for src_elem in element.iter('source'):
+            particle = src_elem.get('particle')
+            if particle is None:
+                continue
+            nuc.sources[particle] = Univariate.from_xml_element(src_elem)
+
         for reaction_elem in element.iter('reaction'):
             r_type = reaction_elem.get('type')
             Q = float(reaction_elem.get('Q', '0'))
@@ -161,6 +175,12 @@ class Nuclide:
                 mode_elem.set('type', mode_type)
                 mode_elem.set('target', daughter or "Nothing")
                 mode_elem.set('branching_ratio', str(br))
+
+        # Decay radiation sources
+        for particle, source in self.sources.items():
+            src_elem = source.to_xml_element('source')
+            src_elem.set('particle', particle)
+            elem.append(src_elem)
 
         elem.set('reactions', str(len(self.reactions)))
         for rx, daughter, Q, br in self.reactions:

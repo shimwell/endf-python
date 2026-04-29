@@ -6,6 +6,7 @@
 # endf.Material (which already parses MF1/MT451 metadata) rather than
 # openmc.data.endf.Evaluation, and to use endf-python's record helpers.
 
+from collections import defaultdict
 from collections.abc import Iterable
 from io import StringIO
 from math import log
@@ -17,12 +18,39 @@ import numpy as np
 from uncertainties import ufloat, UFloat
 
 from . import _checkvalue as cv
+from ._univariate import Discrete, Tabular
 from .data import ATOMIC_SYMBOL, ATOMIC_NUMBER, gnds_name
 from .material import Material
 from .records import get_head_record, get_list_record, get_tab1_record
 
 
 __all__ = ["FissionProductYields", "DecayMode", "Decay", "get_decay_modes"]
+
+
+# ENDF spectrum label (as parsed into Decay.spectra) -> OpenMC particle-type
+# string used in chain XML ``<source particle="...">`` attributes.
+_ENDF_TO_PARTICLE = {
+    'gamma': 'photon',
+    'beta-': 'electron',
+    'ec/beta+': 'positron',
+    'alpha': 'alpha',
+    'n': 'neutron',
+    'sf': 'fragment',
+    'p': 'proton',
+    'e-': 'electron',
+    'xray': 'photon',
+    'anti-neutrino': 'anti-neutrino',
+    'neutrino': 'neutrino',
+}
+
+# MF=6 TAB1 interpolation scheme -> tabular scheme name.
+_TAB1_INTERPOLATION = {
+    1: 'histogram',
+    2: 'linear-linear',
+    3: 'linear-log',
+    4: 'log-linear',
+    5: 'log-log',
+}
 
 
 # Gives name and (change in A, change in Z) resulting from decay
@@ -294,6 +322,7 @@ class Decay:
         self.modes = []
         self.spectra = {}
         self.average_energies = {}
+        self._sources = None
 
         # Head record
         items = get_head_record(file_obj)
@@ -431,6 +460,107 @@ class Decay:
         if energy:
             return energy['light'] + energy['electromagnetic'] + energy['heavy']
         return ufloat(0, 0)
+
+    @property
+    def sources(self):
+        """Radioactive decay source distributions.
+
+        Returns a dict mapping particle type (``"photon"``, ``"electron"``,
+        ``"alpha"``, …) to a :class:`.Discrete` or :class:`.Tabular`
+        distribution whose abscissae are particle energies in eV and whose
+        ordinates are emission rates in decays⁻¹·s⁻¹ (i.e. already multiplied
+        by the decay constant λ). This is the same representation OpenMC
+        consumes when reading/writing ``<source>`` elements in chain XML.
+        """
+        if self._sources is not None:
+            return self._sources
+
+        # Stable nuclide (no decay) has no sources
+        if self.nuclide.get('stable', False):
+            self._sources = {}
+            return self._sources
+
+        decay_constant = self.decay_constant.n
+        # Mirror openmc's bookkeeping: per-particle list, then combine. In
+        # practice a single ENDF spectrum never populates both a discrete and
+        # a continuous branch for the same particle (we scanned all of
+        # ENDF/B-VIII.0 — zero 'both' cases), so each list ends up length 1
+        # and combining is a no-op. We still merge multiple ENDF spectra
+        # that map to the same OpenMC particle type (e.g. 'gamma' + 'xray'
+        # → 'photon') by summing line spectra.
+        raw = {}
+
+        for particle, spectrum in self.spectra.items():
+            particle_type = _ENDF_TO_PARTICLE.get(particle)
+            if particle_type is None:
+                continue
+
+            flag = spectrum.get('continuous_flag')
+            bucket = raw.setdefault(particle_type, [])
+
+            # Discrete component — always emitted when flag indicates discrete,
+            # even if the discrete list is empty (matches openmc: U235/sf,
+            # U238/n, etc. emit <source><parameters> </parameters></source>).
+            if flag in ('discrete', 'both'):
+                energies = []
+                intensities = []
+                for di in spectrum.get('discrete', []):
+                    energies.append(di['energy'].n)
+                    intensities.append(di['intensity'].n)
+                norm = spectrum['discrete_normalization'].n
+                rates = [decay_constant * norm * i for i in intensities]
+                bucket.append(Discrete(energies, rates))
+
+            if flag in ('continuous', 'both'):
+                cont = spectrum.get('continuous')
+                if cont is not None and 'probability' in cont:
+                    f = cont['probability']
+                    interp_code = int(f.interpolation[0]) if len(f.interpolation) >= 1 else 2
+                    interp = _TAB1_INTERPOLATION.get(interp_code, 'linear-linear')
+                    norm = spectrum['continuous_normalization'].n
+                    rates = (decay_constant * norm * f.y).tolist()
+                    bucket.append(Tabular(list(f.x), rates, interp))
+
+        # Reduce each per-particle list to a single distribution. Matches
+        # openmc's combine_distributions -> Discrete.merge path: even for a
+        # single Discrete the function deduplicates equal x values by summing
+        # their rates and sorting, which collapses internal duplicates that
+        # the raw ENDF discrete list can contain (e.g. K- and L-shell
+        # conversion electrons tabulated at the same parent gamma energy).
+        sources = {}
+        for particle_type, dists in raw.items():
+            if not dists:
+                continue
+            discretes = [d for d in dists if isinstance(d, Discrete)]
+            tabulars = [d for d in dists if isinstance(d, Tabular)]
+
+            merged_discrete = None
+            if discretes:
+                p_merged = defaultdict(float)
+                for d in discretes:
+                    for x, p in zip(d.x, d.p):
+                        p_merged[x] += p
+                x_arr = sorted(p_merged)
+                p_arr = [p_merged[x] for x in x_arr]
+                merged_discrete = Discrete(x_arr, p_arr)
+
+            if tabulars and not discretes:
+                # Single tabular → pass through; multiple would need Mixture
+                # (never seen in ENDF/B-VIII, so pick the longest).
+                sources[particle_type] = (
+                    tabulars[0] if len(tabulars) == 1
+                    else max(tabulars, key=len)
+                )
+            elif merged_discrete is not None and not tabulars:
+                sources[particle_type] = merged_discrete
+            elif merged_discrete is not None and tabulars:
+                # Discrete + Tabular combination would need Mixture. Not
+                # produced by ENDF/B-VIII; prefer the discrete (which
+                # dominates the structure of real chain XML).
+                sources[particle_type] = merged_discrete
+
+        self._sources = sources
+        return self._sources
 
     @classmethod
     def from_endf(cls, material_or_filename):
