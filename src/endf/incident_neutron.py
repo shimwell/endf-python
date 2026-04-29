@@ -269,6 +269,118 @@ class IncidentNeutron:
 
         return Tabulated1D(energies, removal_vals)
 
+    def multiplication_factor(self, temperature: str = '0K') -> Tabulated1D:
+        """Compute the average number of neutrons exiting per neutron-induced
+        collision as a function of incident energy.
+
+        .. math::
+
+            M(E) = \\frac{\\sum_{\\text{MT}} n_{\\text{out}}^{(\\text{MT})}(E)
+                   \\, \\sigma^{(\\text{MT})}(E)}{\\sigma_{\\text{tot}}(E)}
+
+        where the sum runs over every non-redundant reaction MT and
+        :math:`n_{\\text{out}}^{(\\text{MT})}(E)` is the total neutron yield of
+        that reaction at energy :math:`E`. Yields are taken from each
+        Reaction's neutron Products, so:
+
+        - Elastic and inelastic give 1.
+        - (n,2n)/(n,3n)/(n,4n)/... give 2/3/4/...
+        - Multi-particle channels with one or more neutrons in the exit
+          channel ((n,nα), (n,2np), etc.) contribute their neutron count.
+        - Fission contributes ν̄(E) (energy-dependent), reading the 'total'
+          yield when present to avoid prompt+delayed double-counting.
+        - Pure absorption channels ((n,γ), (n,p), (n,α) without exit
+          neutrons, ...) contribute 0 to the numerator and only via
+          σ_total to the denominator.
+
+        Useful as a physics-derived asymptotic-slope bound for shielding
+        codes: in a multiplying medium the upper bound on neutron-count
+        growth is ``d(ln N)/d(μt) ≤ M(E) - 1``.
+
+        Notes
+        -----
+        For an :class:`IncidentNeutron` constructed via
+        :meth:`from_endf`, the cross sections are smooth-pointwise only -
+        resonance contributions are not reconstructed from MF=2 parameters.
+        The result is therefore unreliable in the resolved- and
+        unresolved-resonance regions (typically below a few keV up to a
+        few hundred keV depending on the nuclide). For resonance-accurate
+        :math:`M(E)`, load from an ACE file via :meth:`from_ace` (or load
+        an OpenMC HDF5 file with :func:`openmc.data.IncidentNeutron.from_hdf5`
+        and call the equivalent function there) - both paths consume data
+        already reconstructed and Doppler-broadened by NJOY. At
+        fast-neutron energies (above ~1 MeV) the smooth pointwise xs is
+        sufficient and the result is accurate.
+
+        .. todo::
+           Implement MF=2 resonance reconstruction (Reich-Moore,
+           Multi-Level Breit-Wigner, R-Matrix Limited) in endf-python so
+           that :meth:`multiplication_factor` can be called on a
+           :meth:`from_endf` object and return correct values at all
+           energies including the resolved- and unresolved-resonance
+           regions. Until then, callers wanting resonance-accurate
+           :math:`M(E)` must use ACE/HDF5 sources.
+
+        Parameters
+        ----------
+        temperature
+            Temperature key for cross section lookup (e.g., ``'0K'``,
+            ``'294K'``).
+
+        Returns
+        -------
+        Tabulated1D
+            Multiplication factor as a function of incident energy in eV,
+            on the nuclide's native MT=1 (total xs) energy grid.
+
+        """
+        if 1 not in self:
+            raise ValueError("Total cross section (MT=1) not available.")
+
+        total_xs = self[1].xs[temperature]
+        energies = total_xs.x
+        sigma_total = total_xs(energies)
+
+        numerator = np.zeros_like(energies)
+
+        for rx in self.reactions.values():
+            if rx.redundant:
+                continue
+            if rx.MT == 1:
+                continue
+            if not rx.products:
+                continue
+            if rx.xs is None or temperature not in rx.xs:
+                continue
+
+            sigma_mt = rx.xs[temperature](energies)
+
+            neutron_products = [p for p in rx.products if p.name == 'neutron']
+            if not neutron_products:
+                continue
+
+            # If a 'total' yield is present (fission with both MF=1/MT=452
+            # and MT=456 split into prompt + delayed elsewhere), use only
+            # the total to avoid double-counting prompt+delayed.
+            total_yield_products = [
+                p for p in neutron_products if p.emission_mode == 'total'
+            ]
+            if total_yield_products:
+                relevant = total_yield_products
+            else:
+                relevant = neutron_products
+
+            n_out = np.zeros_like(energies)
+            for product in relevant:
+                n_out = n_out + product.yield_(energies)
+
+            numerator = numerator + n_out * sigma_mt
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            M = np.where(sigma_total > 0, numerator / sigma_total, 0.0)
+
+        return Tabulated1D(energies, M)
+
     def _get_reaction_components(self, MT: int) -> List[int]:
         """Determine what reactions make up redundant reaction.
 
