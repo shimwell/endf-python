@@ -4,6 +4,7 @@
 from importlib.metadata import version, PackageNotFoundError
 
 from .material import *
+from .univariate import *
 from .incident_neutron import *
 from .incident_photon import *
 from .function import *
