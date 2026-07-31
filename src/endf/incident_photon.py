@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 from typing import Union, List, Optional
 
 import numpy as np
@@ -8,6 +9,92 @@ from .material import Material
 from .fileutils import PathLike
 from .function import Tabulated1D
 from . import ace
+
+
+# Auxiliary data shipped with this package. These are not ENDF evaluations:
+# they are the Compton profiles, bremsstrahlung cross sections and density
+# effect parameters needed to describe photon interactions, which the
+# photoatomic sublibrary does not carry. See datafiles/README.md for provenance.
+_DATAFILES = Path(__file__).parent / 'datafiles'
+
+# Populated on first use by _load_compton_profiles and _load_bremsstrahlung,
+# which read the whole table once and cache it for every element.
+_COMPTON_PROFILES = {}
+_BREMSSTRAHLUNG = {}
+
+# Highest atomic number covered by the auxiliary data
+_MAX_Z = 100
+
+
+def _load_compton_profiles():
+    """Read the tabulated Compton profiles for every element."""
+    if _COMPTON_PROFILES:
+        return
+    import h5py
+
+    with h5py.File(_DATAFILES / 'compton_profiles.h5', 'r') as f:
+        _COMPTON_PROFILES['pz'] = f['pz'][()]
+        for i in range(1, _MAX_Z + 1):
+            group = f[f'{i:03}']
+            _COMPTON_PROFILES[i] = {
+                'num_electrons': group['num_electrons'][()],
+                'binding_energy': group['binding_energy'][()] * EV_PER_MEV,
+                'J': group['J'][()],
+            }
+
+
+def _load_bremsstrahlung():
+    """Read the bremsstrahlung cross sections and density effect data for every
+    element, resampling the scaled cross sections onto a common energy grid."""
+    if _BREMSSTRAHLUNG:
+        return
+    import h5py
+    from scipy.interpolate import CubicSpline
+
+    with h5py.File(_DATAFILES / 'density_effect.h5', 'r') as f:
+        for i in range(1, _MAX_Z + 1):
+            group = f[f'{i:03}']
+            _BREMSSTRAHLUNG[i] = {
+                'I': group.attrs['I'],
+                'num_electrons': group['num_electrons'][()],
+                'ionization_energy': group['ionization_energy'][()],
+            }
+
+    brem = (_DATAFILES / 'BREMX.DAT').read_text().split()
+
+    # Incident electron kinetic energy grid in eV
+    _BREMSSTRAHLUNG['electron_energy'] = np.logspace(3, 9, 200)
+    log_energy = np.log(_BREMSSTRAHLUNG['electron_energy'])
+
+    # Number of tabulated electron and photon energy values
+    n = int(brem[37])
+    k = int(brem[38])
+    p = 39
+
+    # Log of the tabulated incident electron kinetic energies, used for cubic
+    # spline interpolation in log energy. Stored in MeV, so convert to eV.
+    logx = np.log(np.fromiter(brem[p:p + n], float, n) * EV_PER_MEV)
+    p += n
+
+    # Reduced photon energy values
+    _BREMSSTRAHLUNG['photon_energy'] = np.fromiter(brem[p:p + k], float, k)
+    p += k
+
+    for i in range(1, _MAX_Z + 1):
+        dcs = np.empty([len(log_energy), k])
+
+        # Scaled cross sections for each electron energy and reduced photon
+        # energy for this Z. Stored in mb, so convert to b.
+        y = np.reshape(np.fromiter(brem[p:p + n * k], float, n * k),
+                       (n, k)) * 1.0e-3
+        p += k * n
+
+        for j in range(k):
+            # Cubic spline interpolation in log energy, linear in the cross
+            # section itself
+            dcs[:, j] = CubicSpline(logx, y[:, j])(log_energy)
+
+        _BREMSSTRAHLUNG[i]['dcs'] = dcs
 
 
 # Electron subshell labels (index corresponds to ENDF designator)
@@ -279,8 +366,15 @@ class IncidentPhoton:
         Dictionary of Compton profile data with keys 'num_electrons'
         (number of electrons in each subshell), 'binding_energy'
         (ionization potential of each subshell in [eV]), and 'J' (list of
-        Tabulated1D Compton profiles). Only populated when reading from
-        ACE tables.
+        Tabulated1D Compton profiles).
+    bremsstrahlung : dict
+        Dictionary of bremsstrahlung data with keys 'I' (mean excitation energy
+        in [eV]), 'num_electrons' (number of electrons in each subshell),
+        'ionization_energy' (ionization potential of each subshell in [eV]),
+        'electron_energy' (incident electron kinetic energy grid in [eV]),
+        'photon_energy' (ratio of the photon energy to the incident electron
+        kinetic energy), and 'dcs' (scaled bremsstrahlung differential cross
+        sections in [mb]).
 
     """
 
@@ -289,6 +383,7 @@ class IncidentPhoton:
         self.reactions = {}
         self.atomic_relaxation = None
         self.compton_profiles = {}
+        self.bremsstrahlung = {}
 
     @classmethod
     def from_endf(
@@ -353,6 +448,13 @@ class IncidentPhoton:
             if not isinstance(relaxation, Material):
                 relaxation = Material(relaxation)
             data.atomic_relaxation = AtomicRelaxation.from_endf(relaxation)
+
+        # The photoatomic sublibrary carries neither Compton profiles nor
+        # bremsstrahlung cross sections, so add them from the auxiliary data
+        # shipped with this package. (An ACE photoatomic table does carry
+        # Compton profiles, which is why from_ace only adds bremsstrahlung.)
+        data._add_compton_profiles()
+        data._add_bremsstrahlung()
 
         return data
 
@@ -524,7 +626,28 @@ class IncidentPhoton:
                 rx.subshell_binding_energy = \
                     data.atomic_relaxation.binding_energy[shell]
 
+        # Compton profiles came from the table itself; bremsstrahlung data is
+        # not in an ACE photoatomic table, so add it from the auxiliary data.
+        data._add_bremsstrahlung()
+
         return data
+
+    def _add_compton_profiles(self):
+        """Attach the tabulated Compton profiles for this element."""
+        _load_compton_profiles()
+        profile = _COMPTON_PROFILES[self.atomic_number]
+        pz = _COMPTON_PROFILES['pz']
+        self.compton_profiles['num_electrons'] = profile['num_electrons']
+        self.compton_profiles['binding_energy'] = profile['binding_energy']
+        self.compton_profiles['J'] = [Tabulated1D(pz, J_k) for J_k in profile['J']]
+
+    def _add_bremsstrahlung(self):
+        """Attach the data used in the thick-target bremsstrahlung
+        approximation for this element."""
+        _load_bremsstrahlung()
+        self.bremsstrahlung['electron_energy'] = _BREMSSTRAHLUNG['electron_energy']
+        self.bremsstrahlung['photon_energy'] = _BREMSSTRAHLUNG['photon_energy']
+        self.bremsstrahlung.update(_BREMSSTRAHLUNG[self.atomic_number])
 
     def __contains__(self, MT: int):
         return MT in self.reactions
