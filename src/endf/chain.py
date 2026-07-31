@@ -130,7 +130,7 @@ REACTIONS = {
     '(n,5n2p)': ReactionInfo({200}, (-6, -2), ('H1', 'H1')),
 }
 
-__all__ = ["Chain", "REACTIONS"]
+__all__ = ["Chain", "REACTIONS", "normalise_branch_ratios"]
 
 
 def _as_material(x) -> Material:
@@ -138,6 +138,33 @@ def _as_material(x) -> Material:
     if isinstance(x, Material):
         return x
     return Material(x)
+
+
+def normalise_branch_ratios(branch_ratios):
+    """Scale evaluated decay branching ratios so they sum to one.
+
+    Evaluated ratios often miss unity by a little. The residual is absorbed into
+    the *largest* branch, which perturbs it fractionally least; putting it into
+    an arbitrary branch instead can change a 1e-9 branch by orders of magnitude.
+    Ratios that already sum to one within floating-point tolerance are left
+    exactly as evaluated.
+
+    Parameters
+    ----------
+    branch_ratios : list of float
+        Branching ratios as evaluated. Modified in place and also returned.
+
+    Returns
+    -------
+    list of float
+        The same list, summing to one.
+
+    """
+    if branch_ratios and not math.isclose(sum(branch_ratios), 1.0):
+        max_br = max(branch_ratios)
+        max_index = branch_ratios.index(max_br)
+        branch_ratios[max_index] = max_br - sum(branch_ratios) + 1.0
+    return branch_ratios
 
 
 def replace_missing(product, decay_data):
@@ -283,7 +310,12 @@ class Chain:
             reactions[name] = {}
             for mf, mt, _nc, _mod in meta['section_list']:
                 if mf == 3 and (3, mt) in mat.section_data:
-                    reactions[name][mt] = mat.section_data[3, mt]['QM']
+                    # QI is the reaction Q value for the channel actually
+                    # populated. QM, the mass-difference Q, is not the same
+                    # thing: a few evaluations give it with the opposite sign,
+                    # for instance Xe136 MT=103/104/105 in ENDF/B-VIII.1, where
+                    # taking QM makes an endothermic (n,p) look exothermic.
+                    reactions[name][mt] = mat.section_data[3, mt]['QI']
 
         # Build decay data
         if progress:
@@ -319,8 +351,9 @@ class Chain:
             if not data.nuclide['stable'] and data.half_life.nominal_value != 0.0:
                 nuclide.half_life = data.half_life.nominal_value
                 nuclide.decay_energy = data.decay_energy.nominal_value
-                sum_br = 0.0
-                for i, mode in enumerate(data.modes):
+                branch_ratios = []
+                branch_ids = []
+                for mode in data.modes:
                     type_ = ','.join(mode.modes)
                     if mode.daughter in decay_data:
                         target = mode.daughter
@@ -329,12 +362,12 @@ class Chain:
                               f'{mode.daughter}')
                         target = replace_missing(mode.daughter, decay_data)
 
-                    br = mode.branching_ratio.nominal_value
-                    sum_br += br
-                    if i == len(data.modes) - 1 and sum_br != 1.0:
-                        br = 1.0 - sum(m.branching_ratio.nominal_value
-                                       for m in data.modes[:-1])
+                    branch_ratios.append(mode.branching_ratio.nominal_value)
+                    branch_ids.append((type_, target))
 
+                normalise_branch_ratios(branch_ratios)
+
+                for br, (type_, target) in zip(branch_ratios, branch_ids):
                     nuclide.add_decay_mode(type_, target, br)
 
                 nuclide.sources = data.sources
