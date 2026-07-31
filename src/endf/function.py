@@ -9,6 +9,19 @@ import numpy as np
 from .data import EV_PER_MEV
 
 
+# ENDF interpolation law codes (the values stored in a TAB1 record's
+# interpolation array) mapped to the names used for them elsewhere. The names
+# describe how y varies with x, so 'linear-log' is law 3, where y is linear in
+# ln(x).
+INTERPOLATION_SCHEME = {
+    1: 'histogram',
+    2: 'linear-linear',
+    3: 'linear-log',
+    4: 'log-linear',
+    5: 'log-log',
+}
+
+
 class Tabulated1D:
     """A one-dimensional tabulated function.
 

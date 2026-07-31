@@ -24,11 +24,17 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from numbers import Real
-from typing import Optional, Union
+from typing import Union
+
+try:
+    import lxml.etree as ET
+except ImportError:
+    import xml.etree.ElementTree as ET
 
 import numpy as np
 
 from ._checkvalue import check_type, check_greater_than
+from ._xml import get_text, get_elem_list
 
 
 __all__ = [
@@ -100,6 +106,46 @@ class Univariate(ABC):
     def normalize(self):
         """Scale the stored probabilities so the distribution integrates to 1."""
 
+    @abstractmethod
+    def to_xml_element(self, element_name: str):
+        """Return an XML representation of the distribution.
+
+        Parameters
+        ----------
+        element_name
+            Name to give the returned element
+
+        """
+
+    @classmethod
+    def from_xml_element(cls, elem):
+        """Generate a distribution from an XML element, dispatching on its
+        ``type`` attribute.
+
+        Parameters
+        ----------
+        elem
+            XML element
+
+        Returns
+        -------
+        The distribution described by the element
+
+        """
+        distribution = get_text(elem, 'type')
+        if distribution == 'discrete':
+            return Discrete.from_xml_element(elem)
+        if distribution == 'tabular':
+            return Tabular.from_xml_element(elem)
+        if distribution == 'mixture':
+            return Mixture.from_xml_element(elem)
+        raise ValueError(
+            f"Unsupported distribution type {distribution!r}. This library "
+            "reads the distributions used for tabulated nuclear data "
+            "(discrete, tabular, mixture); the analytic and sampling-only "
+            "forms are not implemented."
+        )
+
 
 class Discrete(Univariate):
     """Distribution characterized by a probability mass function.
@@ -167,6 +213,20 @@ class Discrete(Univariate):
 
     def normalize(self):
         self._p = self._p / self._p.sum()
+
+    def to_xml_element(self, element_name: str):
+        element = ET.Element(element_name)
+        element.set("type", "discrete")
+        params = ET.SubElement(element, "parameters")
+        params.text = ' '.join(map(str, self.x)) + ' ' + ' '.join(map(str, self.p))
+        return element
+
+    @classmethod
+    def from_xml_element(cls, elem) -> Discrete:
+        params = get_elem_list(elem, "parameters", float)
+        x = params[:len(params) // 2]
+        p = params[len(params) // 2:]
+        return cls(x, p)
 
     @classmethod
     def merge(cls, dists: Sequence[Discrete], probs: Sequence[float]) -> Discrete:
@@ -336,6 +396,23 @@ class Tabular(Univariate):
     def normalize(self):
         self._p = self._p / self.cdf().max()
 
+    def to_xml_element(self, element_name: str):
+        element = ET.Element(element_name)
+        element.set("type", "tabular")
+        element.set("interpolation", self.interpolation)
+        params = ET.SubElement(element, "parameters")
+        params.text = ' '.join(map(str, self.x)) + ' ' + ' '.join(map(str, self.p))
+        return element
+
+    @classmethod
+    def from_xml_element(cls, elem) -> Tabular:
+        interpolation = get_text(elem, 'interpolation')
+        params = get_elem_list(elem, "parameters", float)
+        # Round up: histogram distributions may omit the trailing probability,
+        # which leaves an odd number of parameters.
+        m = (len(params) + 1) // 2
+        return cls(params[:m], params[m:], interpolation)
+
 
 class Mixture(Univariate):
     """Probability distribution characterized by a mixture of random variables.
@@ -407,6 +484,24 @@ class Mixture(Univariate):
 
     def normalize(self):
         self._probability = self._probability / self._probability.sum()
+
+    def to_xml_element(self, element_name: str):
+        element = ET.Element(element_name)
+        element.set("type", "mixture")
+        for p, d in zip(self.probability, self.distribution):
+            pair = ET.SubElement(element, "pair")
+            pair.set("probability", str(p))
+            pair.append(d.to_xml_element("dist"))
+        return element
+
+    @classmethod
+    def from_xml_element(cls, elem) -> Mixture:
+        probability = []
+        distribution = []
+        for pair in elem.findall('pair'):
+            probability.append(float(get_text(pair, 'probability')))
+            distribution.append(Univariate.from_xml_element(pair.find("dist")))
+        return cls(probability, distribution)
 
 
 def combine_distributions(

@@ -18,8 +18,10 @@ from uncertainties import ufloat, UFloat
 
 from . import _checkvalue as cv
 from .data import ATOMIC_SYMBOL, ATOMIC_NUMBER, gnds_name
+from .function import INTERPOLATION_SCHEME
 from .material import Material
 from .records import get_head_record, get_list_record, get_tab1_record
+from .univariate import Discrete, Tabular, combine_distributions
 
 
 __all__ = ["FissionProductYields", "DecayMode", "Decay", "get_decay_modes"]
@@ -38,6 +40,24 @@ _DECAY_MODES = {
     8: ('e-', (0, 0)),
     9: ('xray', (0, 0)),
     10: ('unknown', None)
+}
+
+# Particle emitted for each ENDF radiation type, using the names a source
+# distribution is keyed by. Several radiation types map onto the same particle
+# (gammas and x-rays are both photons, betas and Auger/conversion electrons are
+# both electrons), and their spectra are combined in Decay.sources.
+_SOURCE_PARTICLES = {
+    'gamma': 'photon',
+    'xray': 'photon',
+    'beta-': 'electron',
+    'e-': 'electron',
+    'ec/beta+': 'positron',
+    'alpha': 'alpha',
+    'n': 'neutron',
+    'sf': 'fragment',
+    'p': 'proton',
+    'anti-neutrino': 'anti-neutrino',
+    'neutrino': 'neutrino',
 }
 
 _RADIATION_TYPES = {
@@ -431,6 +451,71 @@ class Decay:
         if energy:
             return energy['light'] + energy['electromagnetic'] + energy['heavy']
         return ufloat(0, 0)
+
+    @property
+    def sources(self):
+        """Radioactive decay source distributions.
+
+        The radiation spectra in :attr:`spectra` are given as intensities per
+        decay; multiplying by the decay constant turns them into emission rates
+        per second, which is what a source needs. Discrete lines and continuous
+        spectra of the same particle type are combined into one distribution.
+
+        Returns
+        -------
+        dict
+            Mapping of particle type (``'photon'``, ``'electron'``,
+            ``'positron'``, ``'alpha'``, ``'neutron'``, ``'fragment'``,
+            ``'proton'``, ``'anti-neutrino'``, ``'neutrino'``) to the
+            distribution of emitted particles in [/s].
+
+        """
+        sources = {}
+        name = self.nuclide['name']
+        decay_constant = self.decay_constant.n
+
+        for particle, spectra in self.spectra.items():
+            try:
+                particle_type = _SOURCE_PARTICLES[particle]
+            except KeyError:
+                raise ValueError(
+                    f"{name}: no source particle type known for radiation "
+                    f"type {particle!r}"
+                ) from None
+
+            dists = sources.setdefault(particle_type, [])
+
+            # Discrete lines
+            if spectra['continuous_flag'] in ('discrete', 'both'):
+                energies = np.array(
+                    [d['energy'].n for d in spectra['discrete']])
+                intensities = np.array(
+                    [d['intensity'].n for d in spectra['discrete']])
+                norm = spectra['discrete_normalization'].n
+                dists.append(
+                    Discrete(energies, decay_constant * norm * intensities))
+
+            # Continuous spectrum
+            if spectra['continuous_flag'] in ('continuous', 'both'):
+                f = spectra['continuous']['probability']
+                if len(f.interpolation) > 1:
+                    raise NotImplementedError(
+                        f"Multiple interpolation regions in the continuous "
+                        f"spectrum for {name}, {particle}."
+                    )
+                interpolation = INTERPOLATION_SCHEME[f.interpolation[0]]
+                if interpolation not in ('histogram', 'linear-linear'):
+                    warn(f"Continuous spectra with {interpolation} "
+                         f"interpolation ({name}, {particle}) encountered.")
+
+                norm = spectra['continuous_normalization'].n
+                dists.append(
+                    Tabular(f.x, decay_constant * norm * f.y, interpolation))
+
+        return {
+            particle_type: combine_distributions(dists, [1.0] * len(dists))
+            for particle_type, dists in sources.items()
+        }
 
     @classmethod
     def from_endf(cls, material_or_filename):

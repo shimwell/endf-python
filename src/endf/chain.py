@@ -337,6 +337,8 @@ class Chain:
 
                     nuclide.add_decay_mode(type_, target, br)
 
+                nuclide.sources = data.sources
+
             fissionable = False
             if parent in reactions:
                 reactions_available = set(reactions[parent].keys())
@@ -715,6 +717,7 @@ class Chain:
             new_nuclide = Nuclide(previous.name)
             new_nuclide.half_life = previous.half_life
             new_nuclide.decay_energy = previous.decay_energy
+            new_nuclide.sources = previous.sources.copy()
             if hasattr(previous, '_fpy'):
                 new_nuclide._fpy = previous._fpy
 
