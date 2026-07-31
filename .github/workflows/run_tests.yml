@@ -4,12 +4,16 @@ on:
   # allows running workflows manually
   workflow_dispatch:
 
+  # local-develop is where this fork's work lands before going upstream, so it
+  # needs checking too; without it a PR targeting it reports no checks at all.
   pull_request:
     branches:
       - main
+      - local-develop
   push:
     branches:
       - main
+      - local-develop
 
 jobs:
   main:
