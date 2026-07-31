@@ -6,11 +6,19 @@ from typing import Union, List
 
 import numpy as np
 
-from .data import gnds_name, temperature_str, ATOMIC_SYMBOL, EV_PER_MEV, SUM_RULES
-from .material import Material
+import os
+import tempfile
+from io import StringIO
+from warnings import warn
+
+from .data import gnds_name, temperature_str, ATOMIC_SYMBOL, EV_PER_MEV, \
+    SUM_RULES, K_BOLTZMANN
+from .material import Material, get_materials
 from .fileutils import PathLike
-from .function import Tabulated1D
-from .reaction import Reaction, REACTION_MT
+from .function import Tabulated1D, Sum
+from .reaction import Reaction, REACTION_MT, _get_photon_products_ace
+from .records import get_head_record, get_tab1_record
+from .urr import ProbabilityTables
 from . import ace
 
 
@@ -50,11 +58,22 @@ class IncidentNeutron:
         and the values are Reaction objects.
     """
 
-    def __init__(self, atomic_number: int, mass_number: int, metastable: int = 0):
+    def __init__(self, atomic_number: int, mass_number: int, metastable: int = 0,
+                 atomic_weight_ratio: float = None, kTs: List[float] = None):
         self.atomic_number = atomic_number
         self.mass_number = mass_number
         self.metastable = metastable
+        self.atomic_weight_ratio = atomic_weight_ratio
+        # Temperatures as kT in [eV], the unit the arrow format stores. ACE
+        # files give kT in MeV; see ace.Table.kT.
+        self.kTs = [] if kTs is None else list(kTs)
         self.reactions = {}
+        # Energy grid per temperature. ENDF evaluations are at a single
+        # temperature; ACE tables carry one each and are merged with
+        # add_temperature_from_ace.
+        self.energy = {}
+        self.urr = {}
+        self._name = None
 
     @classmethod
     def from_endf(cls, filename_or_mat: Union[PathLike, Material]) -> IncidentNeutron:
@@ -96,7 +115,7 @@ class IncidentNeutron:
 
         Parameters
         ----------
-        ace_or_filename
+        filename_or_table
             ACE table to read from. If the value is a string, it is assumed to
             be the filename for the ACE file.
         metastable_scheme : {'mcnp', 'nndc'}
@@ -112,62 +131,290 @@ class IncidentNeutron:
         -------
         Incident neutron continuous-energy data
         """
-        # First obtain the data for the first provided ACE table/file
         if isinstance(filename_or_table, ace.Table):
             table = filename_or_table
         else:
             table = ace.get_table(filename_or_table)
 
-        # If mass number hasn't been specified, make an educated guess
         zaid, xs = table.name.split('.')
         if not xs.endswith('c'):
             raise TypeError(f"{table} is not a continuous-energy neutron ACE table.")
         name, _, Z, mass_number, metastable = \
             ace.get_metadata(int(zaid), metastable_scheme)
 
-        # Get string of temperature to use as a dictionary key
-        strT = temperature_str(table.temperature)
+        # Table.kT is the raw value from the file in MeV; Table.temperature is
+        # the same thing in Kelvin. kTs is kept in eV.
+        data = cls(Z, mass_number, metastable, table.atomic_weight_ratio,
+                   [table.kT * EV_PER_MEV])
+        strT = data.temperatures[0]
 
-        # Create IncidentNeutron object (reactions will be added after)
-        data = cls(Z, mass_number, metastable)
-
-        # Read energy grid
+        # Energy grid and the cross sections stored alongside it
         n_energy = table.nxs[3]
         i = table.jxs[1]
-        energy = table.xss[i : i + n_energy]*EV_PER_MEV
-        total_xs = table.xss[i + n_energy : i + 2*n_energy]
-        absorption_xs = table.xss[i + 2*n_energy : i + 3*n_energy]
-        heating_number = table.xss[i + 4*n_energy : i + 5*n_energy]*EV_PER_MEV
+        energy = table.xss[i:i + n_energy] * EV_PER_MEV
+        data.energy[strT] = energy
+        total_xs = table.xss[i + n_energy:i + 2*n_energy]
+        absorption_xs = table.xss[i + 2*n_energy:i + 3*n_energy]
+        heating_number = table.xss[i + 4*n_energy:i + 5*n_energy] * EV_PER_MEV
 
-        # Create redundant reaction for total (MT=1)
-        xs = {strT: Tabulated1D(energy, total_xs)}
-        data.reactions[1] = Reaction(1, xs, redundant=True)
+        # Redundant reaction for total (MT=1)
+        total = Reaction(1)
+        total.xs[strT] = Tabulated1D(energy, total_xs)
+        total.redundant = True
+        data.reactions[1] = total
 
-        # Create redundant reaction for absorption (MT=101)
+        # Redundant reaction for absorption (MT=101)
         if np.count_nonzero(absorption_xs) > 0:
-            xs = {strT: Tabulated1D(energy, absorption_xs)}
-            data.reactions[101] = Reaction(101, xs, redundant=True)
+            absorption = Reaction(101)
+            absorption.xs[strT] = Tabulated1D(energy, absorption_xs)
+            absorption.redundant = True
+            data.reactions[101] = absorption
 
-        # Create redundant reaction for heating (MT=301)
-        xs = {strT: Tabulated1D(energy, heating_number*total_xs)}
-        data.reactions[301] = Reaction(301, xs, redundant=True)
+        # Redundant reaction for heating (MT=301)
+        heating = Reaction(301)
+        heating.xs[strT] = Tabulated1D(energy, heating_number * total_xs)
+        heating.redundant = True
+        data.reactions[301] = heating
 
         # Read each reaction
-        n_reaction = table.nxs[4] + 1
-        for i in range(n_reaction):
+        for i in range(table.nxs[4] + 1):
             rx = Reaction.from_ace(table, i)
             data.reactions[rx.MT] = rx
 
-        # Make sure redundant cross sections that are present in an ACE file get
-        # marked as such
+        # Some photon production reactions are assigned to MTs that have no
+        # cross section of their own, usually MT=4. Create a redundant reaction
+        # from the components so the photons have somewhere to live.
+        n_photon_reactions = table.nxs[6]
+        photon_mts = table.xss[table.jxs[13]:
+                               table.jxs[13] + n_photon_reactions].astype(int)
+
+        for MT in np.unique(photon_mts // 1000):
+            if MT not in data:
+                if MT not in SUM_RULES:
+                    warn(f"Photon production is present for MT={MT} but no "
+                         "cross section is given.")
+                    continue
+                mts = data.get_reaction_components(MT)
+                if len(mts) == 0:
+                    warn(f"Photon production is present for MT={MT} but no "
+                         "reaction components exist.")
+                    continue
+                rx = data._get_redundant_reaction(MT, mts)
+                rx.products += _get_photon_products_ace(table, rx)
+                data.reactions[MT] = rx
+
+        # An ACE file sometimes gives only the individual levels of a
+        # transmutation reaction, e.g. MT=600-649 rather than the MT=103
+        # summation. Create the summation explicitly so it can be tallied.
+        for MT in (16, 103, 104, 105, 106, 107):
+            if MT not in data:
+                mts = data.get_reaction_components(MT)
+                if len(mts) == 0:
+                    continue
+                data.reactions[MT] = data._get_redundant_reaction(MT, mts)
+
+        # Mark reactions that are redundant sums of others
         for rx in data:
-            mts = data._get_reaction_components(rx.MT)
+            mts = data.get_reaction_components(rx.MT)
             if mts != [rx.MT]:
                 rx.redundant = True
             if rx.MT in (203, 204, 205, 206, 207, 444):
                 rx.redundant = True
 
+        # Unresolved resonance probability tables
+        urr = ProbabilityTables.from_ace(table)
+        if urr is not None:
+            data.urr[strT] = urr
+
         return data
+
+    def add_temperature_from_ace(
+        self,
+        filename_or_table: Union[PathLike, ace.Table],
+        metastable_scheme: str = 'mcnp'
+    ):
+        """Append data from an ACE table at a different temperature.
+
+        Parameters
+        ----------
+        filename_or_table
+            ACE table to read from. If the value is a string, it is assumed to
+            be the filename for the ACE file.
+        metastable_scheme : {'mcnp', 'nndc'}
+            How ZAID identifiers are interpreted for a metastable nuclide; see
+            :meth:`from_ace`.
+
+        """
+        data = IncidentNeutron.from_ace(filename_or_table, metastable_scheme)
+
+        strT = data.temperatures[0]
+        if strT in self.temperatures:
+            warn(f"Cross sections at T={strT} already exist.")
+            return
+
+        if data.name != self.name:
+            raise ValueError("Data provided for an incorrect nuclide.")
+
+        self.kTs += data.kTs
+        self.energy[strT] = data.energy[strT]
+
+        for MT in data.reactions:
+            if MT in self:
+                self.reactions[MT].xs[strT] = data.reactions[MT].xs[strT]
+            else:
+                warn(f"Tried to add cross sections for MT={MT} at T={strT} but "
+                     "this reaction doesn't exist.")
+
+        if strT in data.urr:
+            self.urr[strT] = data.urr[strT]
+
+    @classmethod
+    def from_njoy(
+        cls,
+        filename: PathLike,
+        temperatures: List[float] = None,
+        material: Material = None,
+        **kwargs
+    ) -> IncidentNeutron:
+        """Generate incident neutron data by running NJOY.
+
+        An ENDF evaluation gives cross sections at 0 K, with the resonance
+        region described by resonance parameters rather than pointwise data, so
+        NJOY is used to reconstruct and Doppler broaden it and write the result
+        as ACE, which is then read back.
+
+        Parameters
+        ----------
+        filename
+            Path to the ENDF file
+        temperatures
+            Temperatures in Kelvin to produce data at. Defaults to room
+            temperature (293.6 K).
+        material
+            Material to use, when the ENDF file holds more than one evaluation
+        **kwargs
+            Keyword arguments passed to :func:`endf.njoy.make_ace`
+
+        Returns
+        -------
+        Incident neutron continuous-energy data
+
+        """
+        from .fission_energy import FissionEnergyRelease
+        from .njoy import make_ace
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kwargs.setdefault('output_dir', tmpdir)
+            for key in ('acer', 'pendf', 'heatr', 'broadr', 'gaspr', 'purr'):
+                kwargs.setdefault(key, os.path.join(kwargs['output_dir'], key))
+            kwargs['material'] = material
+            make_ace(filename, temperatures, **kwargs)
+
+            # One ACE table per temperature
+            tables = ace.get_tables(kwargs['acer'])
+            data = cls.from_ace(tables[0])
+            for table in tables[1:]:
+                data.add_temperature_from_ace(table)
+
+            mat = material if material is not None else Material(filename)
+            metadata = mat.section_data[1, 451]
+
+            # Name the nuclide from the evaluation rather than the ACE table:
+            # the ZAID does not encode higher metastable states, so from_ace
+            # gets names like Hf178_m2 wrong.
+            Z, A = divmod(metadata['ZA'], 1000)
+            data.name = gnds_name(Z, A, metadata['LISO'])
+
+            # Add the 0 K elastic scattering cross section from the PENDF tape
+            if '0K' not in data.energy:
+                pendf = Material(kwargs['pendf'])
+                file_obj = StringIO(pendf.section_text[3, 2])
+                get_head_record(file_obj)
+                params, xs = get_tab1_record(file_obj)
+                data.energy['0K'] = xs.x
+                data.reactions[2].xs['0K'] = xs
+
+            # Fission energy release, needed for the heating correction below
+            if (1, 458) in mat.section_data:
+                data.fission_energy = f = FissionEnergyRelease.from_endf(
+                    mat, data)
+            else:
+                f = None
+
+            if not kwargs['heatr']:
+                return data
+
+            # NJOY computes the fission heating number as h = EFR, but two
+            # different KERMAs are wanted: one where outgoing photons deposit
+            # their energy locally and one where they carry it away. Correct
+            # MT=301 for the non-local case and add MT=901 for the local one.
+            def file3_xs(m, MT, E):
+                return m.section_data[3, MT]['sigma'](E)
+
+            heating_local = Reaction(901)
+            heating_local.redundant = True
+
+            heatr_mats = get_materials(kwargs['heatr'])
+            heatr_local_mats = get_materials(str(kwargs['heatr']) + '_local')
+
+            for m, m_local, temp in zip(heatr_mats, heatr_local_mats,
+                                        data.temperatures):
+                kerma = data.reactions[301].xs[temp]
+                E = kerma.x
+
+                if f is not None:
+                    # Replace the fission KERMA with (EFR + EB)*sigma_f
+                    fission = data.reactions[18].xs[temp]
+                    kerma.y = kerma.y - file3_xs(m, 318, E) + (
+                        f.fragments(E) + f.betas(E)) * fission(E)
+
+                kerma_local = file3_xs(m_local, 301, E)
+                if f is not None:
+                    # With photons deposited locally the fission KERMA becomes
+                    # (EFR + EGP + EGD + EB)*sigma_f
+                    kerma_local = kerma_local - file3_xs(m_local, 318, E) + (
+                        f.fragments(E) + f.prompt_photons(E)
+                        + f.delayed_photons(E) + f.betas(E)) * fission(E)
+
+                heating_local.xs[temp] = Tabulated1D(E, kerma_local)
+
+            data.reactions[901] = heating_local
+
+        return data
+
+    def get_reaction_components(self, MT: int) -> List[int]:
+        """Determine what reactions make up a redundant reaction.
+
+        Parameters
+        ----------
+        MT
+            ENDF MT number of the reaction to find components of.
+
+        Returns
+        -------
+        ENDF MT numbers of the reactions that make up the redundant reaction and
+        have cross sections provided.
+
+        """
+        mts = []
+        if MT in SUM_RULES:
+            for MT_i in SUM_RULES[MT]:
+                mts += self.get_reaction_components(MT_i)
+        if mts:
+            return mts
+        return [MT] if MT in self else []
+
+    def _get_redundant_reaction(self, MT: int, mts: List[int]) -> Reaction:
+        """Create a redundant reaction by summing its components."""
+        rx = Reaction(MT)
+        for strT in self.temperatures:
+            energy = self.energy[strT]
+            xss = [self.reactions[mt_i].xs[strT] for mt_i in mts]
+            idx = min(getattr(xs, '_threshold_idx', 0) for xs in xss)
+            rx.xs[strT] = Tabulated1D(energy[idx:], Sum(xss)(energy[idx:]))
+            rx.xs[strT]._threshold_idx = idx
+        rx.redundant = True
+        return rx
 
     def __contains__(self, MT: int):
         return MT in self.reactions
@@ -197,7 +444,21 @@ class IncidentNeutron:
 
     @property
     def name(self) -> str:
+        if self._name is not None:
+            return self._name
         return gnds_name(self.atomic_number, self.mass_number, self.metastable)
+
+    @name.setter
+    def name(self, name: str):
+        self._name = name
+
+    @property
+    def temperatures(self) -> List[str]:
+        """Temperatures at which data is available, as strings like '294K'.
+
+        Derived from :attr:`kTs`, which is in [eV].
+        """
+        return [temperature_str(kT / K_BOLTZMANN) for kT in self.kTs]
 
     @property
     def atomic_symbol(self) -> str:
@@ -269,26 +530,4 @@ class IncidentNeutron:
 
         return Tabulated1D(energies, removal_vals)
 
-    def _get_reaction_components(self, MT: int) -> List[int]:
-        """Determine what reactions make up redundant reaction.
 
-        Parameters
-        ----------
-        mt : int
-            ENDF MT number of the reaction to find components of.
-
-        Returns
-        -------
-        mts : list of int
-            ENDF MT numbers of reactions that make up the redundant reaction and
-            have cross sections provided.
-
-        """
-        mts = []
-        if MT in SUM_RULES:
-            for MT_i in SUM_RULES[MT]:
-                mts += self._get_reaction_components(MT_i)
-        if mts:
-            return mts
-        else:
-            return [MT] if MT in self else []

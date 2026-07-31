@@ -31,3 +31,11 @@ def get_text(elem, name, default=None):
         return elem.get(name, default)
     child = elem.find(name)
     return child.text if child is not None else default
+
+
+def get_elem_list(elem, name, dtype=int):
+    """Retrieve a whitespace-separated list of values from an attribute or
+    subelement, each converted with ``dtype``. Returns None if absent."""
+    text = get_text(elem, name)
+    if text is not None:
+        return [dtype(x) for x in text.split()]

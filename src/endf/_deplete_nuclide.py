@@ -19,6 +19,7 @@ except ImportError:
 from numpy import empty, searchsorted
 
 from ._checkvalue import check_type
+from .univariate import Univariate
 
 
 __all__ = [
@@ -41,6 +42,13 @@ class Nuclide:
     ----------
     name : str, optional
         GND name of this nuclide, e.g. ``"He4"``, ``"Am242_m1"``
+
+    Attributes
+    ----------
+    sources : dict
+        Radiation emitted by the decay of this nuclide, mapping particle type
+        to a distribution of emission rates in [/s]. See
+        :attr:`endf.Decay.sources`.
     """
 
     def __init__(self, name=None):
@@ -50,6 +58,7 @@ class Nuclide:
 
         self.decay_modes = []
         self.reactions = []
+        self.sources = {}
 
         self._yield_data = None
 
@@ -110,6 +119,10 @@ class Nuclide:
             branching_ratio = float(decay_elem.get('branching_ratio'))
             nuc.decay_modes.append(DecayTuple(d_type, target, branching_ratio))
 
+        for src_elem in element.iter('source'):
+            particle = src_elem.get('particle')
+            nuc.sources[particle] = Univariate.from_xml_element(src_elem)
+
         for reaction_elem in element.iter('reaction'):
             r_type = reaction_elem.get('type')
             Q = float(reaction_elem.get('Q', '0'))
@@ -161,6 +174,11 @@ class Nuclide:
                 mode_elem.set('type', mode_type)
                 mode_elem.set('target', daughter or "Nothing")
                 mode_elem.set('branching_ratio', str(br))
+
+        for particle, source in self.sources.items():
+            src_elem = source.to_xml_element('source')
+            src_elem.set('particle', particle)
+            elem.append(src_elem)
 
         elem.set('reactions', str(len(self.reactions)))
         for rx, daughter, Q, br in self.reactions:

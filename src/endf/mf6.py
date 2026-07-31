@@ -100,11 +100,6 @@ class ContinuumEnergyAngle:
         return data
 
 
-class UncorrelatedAngleEnergy:
-    def __init__(self):
-        pass
-
-
 class DiscreteTwoBodyScattering:
     def __init__(self):
         pass
