@@ -14,8 +14,9 @@ from .material import Material
 from .function import Tabulated1D
 from .mf4 import AngleDistribution
 from .mf5 import EnergyDistribution, LevelInelastic
-from .angle_energy import UncorrelatedAngleEnergy
+from .angle_energy import AngleEnergy, UncorrelatedAngleEnergy
 from .product import Product
+from .univariate import Uniform
 from . import ace
 
 
@@ -353,13 +354,15 @@ class Reaction:
     """
     def __init__(self, MT: int, xs: dict = None, products: List[Product] = None,
                  q_reaction: float = 0.0, q_massdiff: float = 0.0,
-                 redundant: bool = False):
+                 redundant: bool = False, center_of_mass: bool = True):
         self.MT = MT
-        self.xs = xs
-        self.products = products
+        self.xs = {} if xs is None else xs
+        self.products = [] if products is None else products
+        self.derived_products = []
         self.q_reaction = q_reaction
         self.q_massdiff = q_massdiff
         self.redundant = redundant
+        self.center_of_mass = center_of_mass
 
     @classmethod
     def from_endf(cls, MT: int, material: Material) -> Reaction:
@@ -457,97 +460,152 @@ class Reaction:
         return cls(MT, xs, products, q_reaction, q_massdiff)
 
     @classmethod
-    def from_ace(cls, table: ace.Table, i_reaction: int):
-        """Generate incident neutron continuous-energy data from an ACE table
+    def from_ace(cls, table: ace.Table, i_reaction: int) -> Reaction:
+        """Generate a reaction from an ACE table.
 
         Parameters
         ----------
         table
             ACE table to read from
         i_reaction
-            Index of the reaction in the ACE table
+            Index of the reaction in the ACE table. Index 0 is elastic
+            scattering, which is stored separately from the other reactions.
 
         Returns
         -------
         Reaction data
 
         """
-        # Get nuclide energy grid
+        # Nuclide energy grid
         n_grid = table.nxs[3]
-        grid = table.xss[table.jxs[1]:table.jxs[1] + n_grid]*EV_PER_MEV
+        grid = table.xss[table.jxs[1]:table.jxs[1] + n_grid] * EV_PER_MEV
 
-        # Convert temperature to a string for indexing data
+        # Temperature as a string, for indexing the cross section dict. Note
+        # that endf's Table.temperature is in Kelvin, unlike the raw kT in MeV
+        # stored in the file.
         strT = temperature_str(table.temperature)
 
         if i_reaction > 0:
-            # Get MT value
             MT = int(table.xss[table.jxs[3] + i_reaction - 1])
+            rx = cls(MT)
+            rx.q_reaction = table.xss[table.jxs[4] + i_reaction - 1] * EV_PER_MEV
 
-            # Get Q-value of reaction
-            q_reaction = table.xss[table.jxs[4] + i_reaction - 1]*EV_PER_MEV
+            # ---------------------------------------------------------------
+            # Cross section
 
-            # ==================================================================
-            # CROSS SECTION
-
-            # Get locator for cross-section data
             loc = int(table.xss[table.jxs[6] + i_reaction - 1])
 
-            # Determine starting index on energy grid
+            # Starting index on the nuclide energy grid
             threshold_idx = int(table.xss[table.jxs[7] + loc - 1]) - 1
-
-            # Determine number of energies in reaction
             n_energy = int(table.xss[table.jxs[7] + loc])
             energy = grid[threshold_idx:threshold_idx + n_energy]
 
-            # Read reaction cross section
-            xs = table.xss[table.jxs[7] + loc + 1:table.jxs[7] + loc + 1 + n_energy]
+            xs = table.xss[table.jxs[7] + loc + 1:
+                           table.jxs[7] + loc + 1 + n_energy]
 
-            # For damage energy production, convert to eV
+            # Damage energy production is stored in MeV
             if MT == 444:
-                xs *= EV_PER_MEV
+                xs = xs * EV_PER_MEV
 
-            # Warn about negative cross sections
             if np.any(xs < 0.0):
-                warn(f"Negative cross sections found for {MT=} in {table.name}.")
+                warn(f"Negative cross sections found for MT={MT} in "
+                     f"{table.name}. Setting to zero.")
+                xs = np.where(xs < 0.0, 0.0, xs)
 
-            tabulated_xs = {strT: Tabulated1D(energy, xs)}
-            rx = Reaction(MT, tabulated_xs, q_reaction=q_reaction)
+            tabulated_xs = Tabulated1D(energy, xs)
+            tabulated_xs._threshold_idx = threshold_idx
+            rx.xs[strT] = tabulated_xs
 
-            # ==================================================================
-            # YIELD AND ANGLE-ENERGY DISTRIBUTION
+            # ---------------------------------------------------------------
+            # Yield and angle-energy distribution
 
-            # TODO: Read yield and angle-energy distribution
+            # The multiplicity, whose sign records the reference frame
+            ty = int(table.xss[table.jxs[5] + i_reaction - 1])
+            rx.center_of_mass = (ty < 0)
+
+            neutron = None
+            if i_reaction < table.nxs[5] + 1:
+                if ty != 19:
+                    if abs(ty) > 100:
+                        # Energy-dependent neutron yield
+                        idx = table.jxs[11] + abs(ty) - 101
+                        yield_ = Tabulated1D.from_ace(table, idx)
+                    else:
+                        # A constant, as a 0-order polynomial
+                        yield_ = Polynomial((abs(ty),))
+
+                    neutron = Product('neutron')
+                    neutron.yield_ = yield_
+                    rx.products.append(neutron)
+                else:
+                    assert MT in FISSION_MTS
+                    rx.products, rx.derived_products = \
+                        _get_fission_products_ace(table)
+
+                    for p in rx.products:
+                        if p.emission_mode in ('prompt', 'total'):
+                            neutron = p
+                            break
+                    else:
+                        raise ValueError(
+                            "Could not find the prompt or total fission neutron.")
+
+                # The DLW block is a linked list: each entry's first word
+                # points at the next distribution for this reaction.
+                lnw = int(table.xss[table.jxs[10] + i_reaction - 1])
+                while lnw > 0:
+                    neutron.applicability.append(
+                        Tabulated1D.from_ace(table, table.jxs[11] + lnw + 2))
+                    neutron.distribution.append(
+                        AngleEnergy.from_ace(table, table.jxs[11], lnw, rx))
+                    lnw = int(table.xss[table.jxs[11] + lnw - 1])
 
         else:
             # Elastic scattering
-            mt = 2
+            rx = cls(2)
 
-            # Get elastic cross section values
-            elastic_xs = table.xss[table.jxs[1] + 3*n_grid:table.jxs[1] + 4*n_grid]
-
-            # Warn about negative elastic scattering cross section
+            elastic_xs = table.xss[table.jxs[1] + 3 * n_grid:
+                                   table.jxs[1] + 4 * n_grid]
             if np.any(elastic_xs < 0.0):
-                warn(f"Negative elastic scattering cross section found for {table.name}.")
+                warn(f"Negative elastic scattering cross section found for "
+                     f"{table.name}. Setting to zero.")
+                elastic_xs = np.where(elastic_xs < 0.0, 0.0, elastic_xs)
 
-            xs = {strT: Tabulated1D(grid, elastic_xs)}
+            tabulated_xs = Tabulated1D(grid, elastic_xs)
+            tabulated_xs._threshold_idx = 0
+            rx.xs[strT] = tabulated_xs
 
-            # No energy distribution for elastic scattering
-            # TODO: Create product
+            # No energy distribution is given for elastic scattering; it can be
+            # calculated analytically.
+            neutron = Product('neutron')
+            neutron.distribution.append(UncorrelatedAngleEnergy())
+            rx.products.append(neutron)
 
-            rx = Reaction(2, xs)
+        # -------------------------------------------------------------------
+        # Angle distribution, for the uncorrelated distributions
 
-        # ======================================================================
-        # ANGLE DISTRIBUTION (FOR UNCORRELATED)
+        if i_reaction < table.nxs[5] + 1:
+            loc = int(table.xss[table.jxs[8] + i_reaction])
+            if loc < 0:
+                # Given as part of a product angle-energy distribution
+                angle_dist = None
+            elif loc == 0:
+                # Isotropic
+                angle_dist = _isotropic_angle(0.0, grid[-1])
+            else:
+                angle_dist = AngleDistribution.from_ace(
+                    table, table.jxs[9], loc)
 
-        # TODO: Read angular distribution
+            if angle_dist is not None:
+                for d in neutron.distribution:
+                    d.angle = angle_dist
 
-        # ======================================================================
-        # PHOTON PRODUCTION
+        # -------------------------------------------------------------------
+        # Photon production
 
-        # TODO: Read photon production
+        rx.products += _get_photon_products_ace(table, rx)
 
         return rx
-
 
     def __repr__(self):
         name = REACTION_NAME.get(self.MT)
@@ -555,3 +613,173 @@ class Reaction:
             return f"<Reaction: MT={self.MT} {name}>"
         else:
             return f"<Reaction: MT={self.MT}>"
+
+
+def _isotropic_angle(energy_low: float, energy_high: float) -> AngleDistribution:
+    """An isotropic angular distribution spanning the given energy range."""
+    mu = Uniform(-1., 1.)
+    return AngleDistribution([energy_low, energy_high], [mu, mu])
+
+
+def _get_fission_products_ace(table: ace.Table):
+    """Generate fission neutron products from an ACE table.
+
+    Returns
+    -------
+    (products, derived_products)
+        Prompt and delayed fission neutrons, and the "total" fission neutron
+        when both prompt and total are given.
+
+    """
+    # No NU block
+    if table.jxs[2] == 0:
+        return None, None
+
+    products = []
+    derived_products = []
+
+    def _read_nu(idx):
+        """Read a nu representation at idx, either polynomial or tabulated."""
+        LNU = int(table.xss[idx])
+        if LNU == 1:
+            NC = int(table.xss[idx + 1])
+            coefficients = table.xss[idx + 2:idx + 2 + NC].copy()
+            for i in range(coefficients.size):
+                coefficients[i] *= EV_PER_MEV**(-i)
+            return Polynomial(coefficients)
+        return Tabulated1D.from_ace(table, idx + 1)
+
+    if table.xss[table.jxs[2]] > 0:
+        # Either prompt nu or total nu is given, not both
+        neutron = Product('neutron')
+        neutron.emission_mode = 'prompt' if table.jxs[24] > 0 else 'total'
+        neutron.yield_ = _read_nu(table.jxs[2])
+        products.append(neutron)
+
+    elif table.xss[table.jxs[2]] < 0:
+        # Both prompt nu and total nu are given
+        prompt_neutron = Product('neutron')
+        prompt_neutron.emission_mode = 'prompt'
+        prompt_neutron.yield_ = _read_nu(table.jxs[2] + 1)
+
+        total_neutron = Product('neutron')
+        total_neutron.emission_mode = 'total'
+        total_neutron.yield_ = _read_nu(
+            table.jxs[2] + int(abs(table.xss[table.jxs[2]])) + 1)
+
+        products.append(prompt_neutron)
+        derived_products.append(total_neutron)
+
+    # Delayed neutrons
+    if table.jxs[24] > 0:
+        yield_delayed = Tabulated1D.from_ace(table, table.jxs[24] + 1)
+
+        idx = table.jxs[25]
+        n_group = table.nxs[8]
+        total_group_probability = 0.
+        for group in range(n_group):
+            delayed_neutron = Product('neutron')
+            delayed_neutron.emission_mode = 'delayed'
+
+            # Stored in inverse shakes, converted to inverse seconds
+            delayed_neutron.decay_rate = table.xss[idx] * 1.e8
+
+            group_probability = Tabulated1D.from_ace(table, idx + 1)
+            if np.all(group_probability.y == group_probability.y[0]):
+                delayed_neutron.yield_ = deepcopy(yield_delayed)
+                delayed_neutron.yield_.y = \
+                    delayed_neutron.yield_.y * group_probability.y[0]
+                total_group_probability += group_probability.y[0]
+            else:
+                # Union energy grid, restricted to where both are interpolable
+                max_energy = min(yield_delayed.x[-1], group_probability.x[-1])
+                energy = np.union1d(yield_delayed.x, group_probability.x)
+                energy = energy[energy <= max_energy]
+                group_yield = yield_delayed(energy) * group_probability(energy)
+                delayed_neutron.yield_ = Tabulated1D(energy, group_yield)
+
+            nr = int(table.xss[idx + 1])
+            ne = int(table.xss[idx + 2 + 2 * nr])
+            idx += 3 + 2 * nr + 2 * ne
+
+            location_start = int(table.xss[table.jxs[26] + group])
+            delayed_neutron.distribution.append(
+                AngleEnergy.from_ace(table, table.jxs[27], location_start))
+
+            products.append(delayed_neutron)
+
+        # The group probabilities in an ACE file do not sum to exactly one, so
+        # renormalize the delayed yields.
+        for product in products[1:]:
+            if total_group_probability > 0.:
+                product.yield_.y = product.yield_.y / total_group_probability
+
+    return products, derived_products
+
+
+def _get_photon_products_ace(table: ace.Table, rx: Reaction) -> List[Product]:
+    """Generate photon products for a reaction from an ACE table."""
+    n_photon_reactions = table.nxs[6]
+    photon_mts = table.xss[table.jxs[13]:
+                           table.jxs[13] + n_photon_reactions].astype(int)
+
+    photons = []
+    for i in range(n_photon_reactions):
+        # The photon MT encodes the neutron reaction it belongs to
+        neutron_mt = photon_mts[i] // 1000
+        if neutron_mt != rx.MT:
+            continue
+
+        photon = Product('photon')
+
+        # --- yield or production cross section ---
+        loca = int(table.xss[table.jxs[14] + i])
+        idx = table.jxs[15] + loca - 1
+        mftype = int(table.xss[idx])
+        idx += 1
+
+        if mftype in (12, 16):
+            # Yield taken from ENDF file 12 or 6
+            mtmult = int(table.xss[idx])
+            assert mtmult == neutron_mt
+            photon.yield_ = Tabulated1D.from_ace(table, idx + 1)
+
+        elif mftype == 13:
+            # Production cross section from ENDF file 13, converted to a yield
+            threshold_idx = int(table.xss[idx]) - 1
+            n_energy = int(table.xss[idx + 1])
+            energy = table.xss[table.jxs[1] + threshold_idx:
+                               table.jxs[1] + threshold_idx + n_energy] \
+                * EV_PER_MEV
+
+            photon_prod_xs = table.xss[idx + 2:idx + 2 + n_energy]
+            neutron_xs = list(rx.xs.values())[0](energy)
+            nonzero = np.where(neutron_xs > 0.)
+
+            yield_ = np.zeros_like(photon_prod_xs)
+            yield_[nonzero] = photon_prod_xs[nonzero] / neutron_xs[nonzero]
+            photon.yield_ = Tabulated1D(energy, yield_)
+
+        else:
+            raise ValueError(f"MFTYPE must be 12, 13 or 16. Got {mftype}")
+
+        # --- energy distribution ---
+        location_start = int(table.xss[table.jxs[18] + i])
+        distribution = AngleEnergy.from_ace(table, table.jxs[19],
+                                            location_start)
+        assert isinstance(distribution, UncorrelatedAngleEnergy)
+
+        # --- angular distribution ---
+        loc = int(table.xss[table.jxs[16] + i])
+        if loc == 0:
+            # No angular data given, isotropic in the laboratory frame
+            distribution.angle = _isotropic_angle(photon.yield_.x[0],
+                                                  photon.yield_.x[-1])
+        else:
+            distribution.angle = AngleDistribution.from_ace(
+                table, table.jxs[17], loc)
+
+        photon.distribution.append(distribution)
+        photons.append(photon)
+
+    return photons

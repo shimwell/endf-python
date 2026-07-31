@@ -341,3 +341,28 @@ class Tabulated2D:
     def __init__(self, breakpoints, interpolation):
         self.breakpoints = breakpoints
         self.interpolation = interpolation
+
+
+class Sum:
+    """Sum of other callables.
+
+    Used for redundant reactions, whose cross section is defined as the sum of
+    other cross sections.
+
+    Parameters
+    ----------
+    functions : Iterable of Callable
+        Functions which are to be added together
+
+    Attributes
+    ----------
+    functions : list of Callable
+        Functions which are to be added together
+
+    """
+
+    def __init__(self, functions):
+        self.functions = list(functions)
+
+    def __call__(self, x):
+        return sum(f(x) for f in self.functions)
