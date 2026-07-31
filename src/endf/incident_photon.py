@@ -126,6 +126,97 @@ for _i, _shell in enumerate(_SUBSHELLS[1:], 1):
 PHOTON_REACTION_MT = {name: mt for mt, name in PHOTON_REACTION_NAME.items()}
 
 
+def compton_profile_cdfs(J: np.ndarray, pz: np.ndarray) -> np.ndarray:
+    """Cumulative distributions for a set of Compton profiles.
+
+    Integrates each profile over the electron momentum grid by the trapezoidal
+    rule. The result is deliberately left un-normalised, so each row ends near
+    0.5 rather than 1: a Compton profile is tabulated for positive pz only, and
+    the missing half is symmetric, which is the convention samplers expect.
+
+    Parameters
+    ----------
+    J
+        Profile values, shape ``(n_shells, n_pz)``
+    pz
+        Electron momentum grid, shape ``(n_pz,)``
+
+    Returns
+    -------
+    Cumulative values of the same shape as ``J``
+
+    """
+    J = np.asarray(J, dtype=float)
+    pz = np.asarray(pz, dtype=float)
+    cdf = np.zeros_like(J)
+    # Trapezoidal cumulative integral along the momentum axis
+    increments = 0.5 * (J[:, :-1] + J[:, 1:]) * np.diff(pz)
+    cdf[:, 1:] = np.cumsum(increments, axis=1)
+    return cdf
+
+
+def compton_subshell_map(compton_num_electrons, subshell_num_electrons):
+    """Associate each Compton-profile shell with its atomic-relaxation subshells.
+
+    The Compton profiles are Biggs Hartree-Fock shells grouped by (n, l), while
+    the atomic-relaxation subshells are EADL shells split by total angular
+    momentum j, so the single 2p Compton shell corresponds to the L2 and L3
+    subshells. The two tabulations use different binding-energy evaluations that
+    disagree by roughly 0.5 to 1%, so they cannot be matched on energy. They do
+    match on occupancy: a Compton (n, l) shell holds exactly the electrons of its
+    constituent j-split subshells. Walking both lists in canonical
+    most-bound-first order and greedily accumulating subshells until their
+    electron count reaches the Compton shell's gives the association.
+
+    Parameters
+    ----------
+    compton_num_electrons
+        Electron occupancy per Compton-profile shell, canonical order
+    subshell_num_electrons
+        Electron occupancy per atomic-relaxation subshell, canonical order
+
+    Returns
+    -------
+    (offsets, indices, weights)
+        CSR arrays. Compton shell ``c`` maps to the subshells
+        ``indices[offsets[c]:offsets[c + 1]]`` with the given occupancy weights,
+        which sum to 1 within a group. An empty range means the shell has no
+        clean counterpart, which happens for the outer and valence shells where
+        the two orderings diverge.
+
+    """
+    sub_occ = [float(n) for n in subshell_num_electrons]
+    offsets = [0]
+    indices = []
+    weights = []
+    cursor = 0
+    stopped = False
+    for c_occ in compton_num_electrons:
+        c_occ = float(c_occ)
+        if not stopped and c_occ > 0.0:
+            acc = 0.0
+            group = []
+            j = cursor
+            # Accumulate consecutive subshells until their occupancy reaches
+            # this Compton shell's. The small negative tolerance keeps the
+            # subshell that completes the group.
+            while j < len(sub_occ) and acc < c_occ - 1e-6:
+                acc += sub_occ[j]
+                group.append(j)
+                j += 1
+            if group and abs(acc - c_occ) <= 1e-3 * max(1.0, c_occ):
+                for k in group:
+                    indices.append(k)
+                    weights.append(sub_occ[k] / c_occ)
+                cursor = j
+            else:
+                # First occupancy mismatch means the orderings have diverged,
+                # so drop this shell and every later one.
+                stopped = True
+        offsets.append(len(indices))
+    return offsets, indices, weights
+
+
 class PhotonReaction:
     """A photon interaction reaction.
 

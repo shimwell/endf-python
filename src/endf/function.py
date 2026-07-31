@@ -219,6 +219,110 @@ class Tabulated1D:
     def interpolation(self, interpolation):
         self._interpolation = interpolation
 
+    @property
+    def is_linear(self) -> bool:
+        """Whether every interpolation region is lin-lin (ENDF law 2)."""
+        return bool(np.all(np.asarray(self.interpolation) == 2))
+
+    def linearize(self, rel_tol: float = 1e-3) -> 'Tabulated1D':
+        """Return an equivalent function using only lin-lin interpolation.
+
+        Consumers that treat tabulated pairs as piecewise linear will silently
+        change the shape of any region declared with another interpolation law,
+        so those regions are resampled densely enough that linear interpolation
+        reproduces the declared law.
+
+        Law 2 (lin-lin) regions pass through unchanged, so an already-linear
+        function is returned with the same points. Law 1 (histogram) is exact:
+        each step becomes a duplicated breakpoint carrying the jump. The smooth
+        laws (3 lin-log, 4 log-lin, 5 log-log) are adaptively bisected until
+        linear interpolation matches within ``rel_tol``, with a depth cap.
+        Intervals where a law is undefined, for instance non-positive values
+        under law 4 or 5, fall back to the stored pair.
+
+        Parameters
+        ----------
+        rel_tol
+            Relative tolerance for the bisection of smooth laws
+
+        Returns
+        -------
+        A function with a single lin-lin interpolation region
+
+        """
+        x = np.asarray(self.x, dtype=np.float64)
+        y = np.asarray(self.y, dtype=np.float64)
+        breakpoints = np.asarray(self.breakpoints, dtype=np.int64)
+        interpolation = np.asarray(self.interpolation, dtype=np.int64)
+
+        if self.is_linear:
+            return Tabulated1D(x, y)
+
+        def law_value(law, x0, y0, x1, y1, xm):
+            """Evaluate the ENDF interpolation law on one interval at xm."""
+            if law == 1:
+                return y0
+            if law == 3:  # y linear in ln(x)
+                return y0 + np.log(xm / x0) / np.log(x1 / x0) * (y1 - y0)
+            if law == 4:  # ln(y) linear in x
+                return y0 * np.exp((xm - x0) / (x1 - x0) * np.log(y1 / y0))
+            if law == 5:  # ln(y) linear in ln(x)
+                return y0 * np.exp(np.log(xm / x0) / np.log(x1 / x0)
+                                   * np.log(y1 / y0))
+            return y0 + (xm - x0) / (x1 - x0) * (y1 - y0)
+
+        def law_defined(law, x0, y0, x1, y1):
+            if law in (3, 5) and (x0 <= 0.0 or x1 <= 0.0):
+                return False
+            if law in (4, 5) and (y0 <= 0.0 or y1 <= 0.0):
+                return False
+            return True
+
+        out_x, out_y = [], []
+
+        def emit(px, py):
+            # Skip exact repeats of the previous pair (shared region
+            # boundaries), but keep intentional duplicate-x jump pairs.
+            if out_x and out_x[-1] == px and out_y[-1] == py:
+                return
+            out_x.append(px)
+            out_y.append(py)
+
+        max_depth = 24
+        for k, law in enumerate(interpolation):
+            i_begin = int(breakpoints[k - 1]) - 1 if k > 0 else 0
+            i_end = int(breakpoints[k]) - 1
+            for i in range(i_begin, i_end):
+                x0, y0, x1, y1 = x[i], y[i], x[i + 1], y[i + 1]
+                emit(x0, y0)
+                if x1 <= x0 or law == 2:
+                    continue
+                if law == 1:
+                    # Exact step: hold y0 up to x1, jump there.
+                    emit(x1, y0)
+                    continue
+                if not law_defined(law, x0, y0, x1, y1):
+                    continue
+                # Adaptive bisection until lin-lin matches the law.
+                stack = [(x0, y0, x1, y1, 0)]
+                while stack:
+                    a, fa, b, fb, depth = stack.pop()
+                    m = 0.5 * (a + b)
+                    if m <= a or m >= b or depth >= max_depth:
+                        emit(b, fb)
+                        continue
+                    fm = law_value(law, x0, y0, x1, y1, m)
+                    f_lin = 0.5 * (fa + fb)
+                    if abs(fm - f_lin) <= rel_tol * max(abs(fm), abs(f_lin)):
+                        emit(b, fb)
+                        continue
+                    # Depth-first, left interval first: push right first.
+                    stack.append((m, fm, b, fb, depth + 1))
+                    stack.append((a, fa, m, fm, depth + 1))
+            emit(x[i_end], y[i_end])
+
+        return Tabulated1D(np.asarray(out_x), np.asarray(out_y))
+
     def integral(self):
         """Integral of the tabulated function over its tabulated range.
 
