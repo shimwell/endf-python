@@ -521,6 +521,11 @@ class Table:
 
     @property
     def temperature(self) -> float:
+        """Temperature in [K].
+
+        Note that :attr:`kT` is the raw value from the file in [MeV]; the two
+        differ by more than ten orders of magnitude.
+        """
         return self.kT * EV_PER_MEV / K_BOLTZMANN
 
     def __repr__(self) -> str:

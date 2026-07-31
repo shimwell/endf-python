@@ -21,7 +21,7 @@ from . import ace
 
 
 REACTION_NAME = {
-    1: '(n,total)', 2: '(n,elastic)', 4: '(n,level)',
+    1: '(n,total)', 2: '(n,elastic)', 3: '(n,nonelastic)', 4: '(n,level)',
     5: '(n,misc)', 11: '(n,2nd)', 16: '(n,2n)', 17: '(n,3n)',
     18: '(n,fission)', 19: '(n,f)', 20: '(n,nf)', 21: '(n,2nf)',
     22: '(n,na)', 23: '(n,n3a)', 24: '(n,2na)', 25: '(n,3na)',
@@ -49,7 +49,7 @@ REACTION_NAME = {
     195: '(n,4n2a)', 196: '(n,4npa)', 197: '(n,3p)',
     198: '(n,n3p)', 199: '(n,3n2pa)', 200: '(n,5n2p)', 203: '(n,Xp)',
     204: '(n,Xd)', 205: '(n,Xt)', 206: '(n,X3He)', 207: '(n,Xa)',
-    301: 'heating', 444: 'damage-energy',
+    301: 'heating', 444: 'damage-energy', 901: 'heating-local',
     649: '(n,pc)', 699: '(n,dc)', 749: '(n,tc)', 799: '(n,3Hec)',
     849: '(n,ac)', 891: '(n,2nc)'
 }

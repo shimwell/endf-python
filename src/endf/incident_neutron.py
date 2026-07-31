@@ -6,14 +6,18 @@ from typing import Union, List
 
 import numpy as np
 
+import os
+import tempfile
+from io import StringIO
 from warnings import warn
 
 from .data import gnds_name, temperature_str, ATOMIC_SYMBOL, EV_PER_MEV, \
     SUM_RULES, K_BOLTZMANN
-from .material import Material
+from .material import Material, get_materials
 from .fileutils import PathLike
 from .function import Tabulated1D, Sum
 from .reaction import Reaction, REACTION_MT, _get_photon_products_ace
+from .records import get_head_record, get_tab1_record
 from .urr import ProbabilityTables
 from . import ace
 
@@ -60,6 +64,8 @@ class IncidentNeutron:
         self.mass_number = mass_number
         self.metastable = metastable
         self.atomic_weight_ratio = atomic_weight_ratio
+        # Temperatures as kT in [eV], the unit the arrow format stores. ACE
+        # files give kT in MeV; see ace.Table.kT.
         self.kTs = [] if kTs is None else list(kTs)
         self.reactions = {}
         # Energy grid per temperature. ENDF evaluations are at a single
@@ -262,6 +268,120 @@ class IncidentNeutron:
         if strT in data.urr:
             self.urr[strT] = data.urr[strT]
 
+    @classmethod
+    def from_njoy(
+        cls,
+        filename: PathLike,
+        temperatures: List[float] = None,
+        material: Material = None,
+        **kwargs
+    ) -> IncidentNeutron:
+        """Generate incident neutron data by running NJOY.
+
+        An ENDF evaluation gives cross sections at 0 K, with the resonance
+        region described by resonance parameters rather than pointwise data, so
+        NJOY is used to reconstruct and Doppler broaden it and write the result
+        as ACE, which is then read back.
+
+        Parameters
+        ----------
+        filename
+            Path to the ENDF file
+        temperatures
+            Temperatures in Kelvin to produce data at. Defaults to room
+            temperature (293.6 K).
+        material
+            Material to use, when the ENDF file holds more than one evaluation
+        **kwargs
+            Keyword arguments passed to :func:`endf.njoy.make_ace`
+
+        Returns
+        -------
+        Incident neutron continuous-energy data
+
+        """
+        from .fission_energy import FissionEnergyRelease
+        from .njoy import make_ace
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kwargs.setdefault('output_dir', tmpdir)
+            for key in ('acer', 'pendf', 'heatr', 'broadr', 'gaspr', 'purr'):
+                kwargs.setdefault(key, os.path.join(kwargs['output_dir'], key))
+            kwargs['material'] = material
+            make_ace(filename, temperatures, **kwargs)
+
+            # One ACE table per temperature
+            tables = ace.get_tables(kwargs['acer'])
+            data = cls.from_ace(tables[0])
+            for table in tables[1:]:
+                data.add_temperature_from_ace(table)
+
+            mat = material if material is not None else Material(filename)
+            metadata = mat.section_data[1, 451]
+
+            # Name the nuclide from the evaluation rather than the ACE table:
+            # the ZAID does not encode higher metastable states, so from_ace
+            # gets names like Hf178_m2 wrong.
+            Z, A = divmod(metadata['ZA'], 1000)
+            data.name = gnds_name(Z, A, metadata['LISO'])
+
+            # Add the 0 K elastic scattering cross section from the PENDF tape
+            if '0K' not in data.energy:
+                pendf = Material(kwargs['pendf'])
+                file_obj = StringIO(pendf.section_text[3, 2])
+                get_head_record(file_obj)
+                params, xs = get_tab1_record(file_obj)
+                data.energy['0K'] = xs.x
+                data.reactions[2].xs['0K'] = xs
+
+            # Fission energy release, needed for the heating correction below
+            if (1, 458) in mat.section_data:
+                data.fission_energy = f = FissionEnergyRelease.from_endf(
+                    mat, data)
+            else:
+                f = None
+
+            if not kwargs['heatr']:
+                return data
+
+            # NJOY computes the fission heating number as h = EFR, but two
+            # different KERMAs are wanted: one where outgoing photons deposit
+            # their energy locally and one where they carry it away. Correct
+            # MT=301 for the non-local case and add MT=901 for the local one.
+            def file3_xs(m, MT, E):
+                return m.section_data[3, MT]['sigma'](E)
+
+            heating_local = Reaction(901)
+            heating_local.redundant = True
+
+            heatr_mats = get_materials(kwargs['heatr'])
+            heatr_local_mats = get_materials(str(kwargs['heatr']) + '_local')
+
+            for m, m_local, temp in zip(heatr_mats, heatr_local_mats,
+                                        data.temperatures):
+                kerma = data.reactions[301].xs[temp]
+                E = kerma.x
+
+                if f is not None:
+                    # Replace the fission KERMA with (EFR + EB)*sigma_f
+                    fission = data.reactions[18].xs[temp]
+                    kerma.y = kerma.y - file3_xs(m, 318, E) + (
+                        f.fragments(E) + f.betas(E)) * fission(E)
+
+                kerma_local = file3_xs(m_local, 301, E)
+                if f is not None:
+                    # With photons deposited locally the fission KERMA becomes
+                    # (EFR + EGP + EGD + EB)*sigma_f
+                    kerma_local = kerma_local - file3_xs(m_local, 318, E) + (
+                        f.fragments(E) + f.prompt_photons(E)
+                        + f.delayed_photons(E) + f.betas(E)) * fission(E)
+
+                heating_local.xs[temp] = Tabulated1D(E, kerma_local)
+
+            data.reactions[901] = heating_local
+
+        return data
+
     def get_reaction_components(self, MT: int) -> List[int]:
         """Determine what reactions make up a redundant reaction.
 
@@ -334,7 +454,10 @@ class IncidentNeutron:
 
     @property
     def temperatures(self) -> List[str]:
-        """Temperatures at which data is available, as strings like '294K'."""
+        """Temperatures at which data is available, as strings like '294K'.
+
+        Derived from :attr:`kTs`, which is in [eV].
+        """
         return [temperature_str(kT / K_BOLTZMANN) for kT in self.kTs]
 
     @property
