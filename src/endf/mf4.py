@@ -8,9 +8,11 @@ from warnings import warn
 import numpy as np
 from numpy.polynomial import Legendre
 
-from .function import Tabulated1D
+from .data import EV_PER_MEV
+from .function import Tabulated1D, INTERPOLATION_SCHEME
 from .records import get_head_record, get_cont_record, get_tab2_record, \
     get_tab1_record, get_list_record
+from .univariate import Tabular, Uniform
 
 
 def parse_mf4(file_obj: TextIO) -> dict:
@@ -139,6 +141,73 @@ class AngleDistribution:
             # Combine
             energy = np.hstack((energy_leg, energy_tab))
             mu = mu_leg + mu_tab
+
+        return cls(energy, mu)
+
+    @classmethod
+    def from_ace(cls, table, location_dist: int,
+                 location_start: int) -> AngleDistribution:
+        """Generate an angular distribution from ACE data.
+
+        Parameters
+        ----------
+        table : endf.ace.Table
+            ACE table to read from
+        location_dist
+            Index in the XSS array corresponding to the start of a block,
+            e.g. JXS(9)
+        location_start
+            Index in the XSS array corresponding to the start of an angle
+            distribution array
+
+        Returns
+        -------
+        Angular distribution
+
+        """
+        idx = location_dist + location_start - 1
+
+        # Number of energies at which angular distributions are tabulated
+        n_energies = int(table.xss[idx])
+        idx += 1
+
+        # Incoming energy grid
+        energy = table.xss[idx:idx + n_energies] * EV_PER_MEV
+        idx += n_energies
+
+        # Locations of the distribution for each incoming energy
+        lc = table.xss[idx:idx + n_energies].astype(int)
+        idx += n_energies
+
+        mu = []
+        for i in range(n_energies):
+            if lc[i] > 0:
+                # Equiprobable 32 bin distribution
+                n_bins = 32
+                idx = location_dist + abs(lc[i]) - 1
+                cos = table.xss[idx:idx + n_bins + 1]
+                pdf = np.zeros(n_bins + 1)
+                pdf[:n_bins] = 1.0 / (n_bins * np.diff(cos))
+                cdf = np.linspace(0.0, 1.0, n_bins + 1)
+
+                mu_i = Tabular(cos, pdf, 'histogram', ignore_negative=True)
+                mu_i.c = cdf
+            elif lc[i] < 0:
+                # Tabular angular distribution
+                idx = location_dist + abs(lc[i]) - 1
+                intt = int(table.xss[idx])
+                n_points = int(table.xss[idx + 1])
+                # Data is given as rows of (values, PDF, CDF)
+                data = table.xss[idx + 2:idx + 2 + 3 * n_points]
+                data.shape = (3, n_points)
+
+                mu_i = Tabular(data[0], data[1], INTERPOLATION_SCHEME[intt])
+                mu_i.c = data[2]
+            else:
+                # Isotropic angular distribution
+                mu_i = Uniform(-1., 1.)
+
+            mu.append(mu_i)
 
         return cls(energy, mu)
 

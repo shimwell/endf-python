@@ -38,7 +38,8 @@ from ._xml import get_text, get_elem_list
 
 
 __all__ = [
-    "Univariate", "Discrete", "Tabular", "Mixture", "combine_distributions"
+    "Univariate", "Discrete", "Tabular", "Uniform", "Mixture",
+    "combine_distributions",
 ]
 
 
@@ -137,6 +138,8 @@ class Univariate(ABC):
             return Discrete.from_xml_element(elem)
         if distribution == 'tabular':
             return Tabular.from_xml_element(elem)
+        if distribution == 'uniform':
+            return Uniform.from_xml_element(elem)
         if distribution == 'mixture':
             return Mixture.from_xml_element(elem)
         raise ValueError(
@@ -412,6 +415,69 @@ class Tabular(Univariate):
         # which leaves an odd number of parameters.
         m = (len(params) + 1) // 2
         return cls(params[:m], params[m:], interpolation)
+
+
+class Uniform(Univariate):
+    """Distribution with constant probability over a finite interval.
+
+    Used for an isotropic angular distribution, where every scattering cosine in
+    [-1, 1] is equally likely.
+
+    Parameters
+    ----------
+    a
+        Lower bound of the interval
+    b
+        Upper bound of the interval
+
+    Attributes
+    ----------
+    a : float
+        Lower bound of the interval
+    b : float
+        Upper bound of the interval
+
+    """
+
+    def __init__(self, a: float = 0.0, b: float = 1.0):
+        super().__init__()
+        self.a = float(a)
+        self.b = float(b)
+
+    def __len__(self) -> int:
+        return 2
+
+    def __repr__(self) -> str:
+        return f"<Uniform: [{self.a}, {self.b}]>"
+
+    def to_tabular(self) -> Tabular:
+        """Return an equivalent two-point histogram :class:`Tabular`."""
+        prob = 1.0 / (self.b - self.a)
+        t = Tabular([self.a, self.b], [prob, prob], 'histogram')
+        t.c = [0.0, 1.0]
+        return t
+
+    def cdf(self) -> np.ndarray:
+        return np.array([0.0, 1.0])
+
+    def integral(self) -> float:
+        return 1.0
+
+    def normalize(self):
+        # A uniform distribution is normalised by construction.
+        pass
+
+    def to_xml_element(self, element_name: str):
+        element = ET.Element(element_name)
+        element.set("type", "uniform")
+        params = ET.SubElement(element, "parameters")
+        params.text = f'{self.a} {self.b}'
+        return element
+
+    @classmethod
+    def from_xml_element(cls, elem) -> Uniform:
+        a, b = get_elem_list(elem, "parameters", float)
+        return cls(a, b)
 
 
 class Mixture(Univariate):

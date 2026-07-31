@@ -14,7 +14,7 @@ from .material import Material
 from .function import Tabulated1D
 from .mf4 import AngleDistribution
 from .mf5 import EnergyDistribution, LevelInelastic
-from .mf6 import UncorrelatedAngleEnergy
+from .angle_energy import UncorrelatedAngleEnergy
 from .product import Product
 from . import ace
 
