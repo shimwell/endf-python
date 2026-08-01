@@ -1,0 +1,277 @@
+ ENDF/B-VIII.1                                                         0  0
+ 9.524200+4 2.399801+2          1          1          0          19546 1451
+ 0.000000+0 0.000000+0          0          0          0          69546 1451
+ 1.000000+0 2.000000+7          1          0         10          89546 1451
+ 0.000000+0 0.000000+0          0          0        134         899546 1451
+ 95-Am-242 LANL       EVAL-DEC04 Talou,Young,Kawano               9546 1451
+ NDS 148, 1 (2018)    DIST-AUG24 REV1-JUL23            20240830   9546 1451
+---- ENDF/B-VIII.1    MATERIAL 9546         REVISION 1            9546 1451
+----- INCIDENT-NEUTRON DATA                                       9546 1451
+------ ENDF-6                                                     9546 1451
+                                                                  9546 1451
+****************************************************************  9546 1451
+Missing exit distributions imported from TENDL2019                9546 1451
+by I.J. Thompson (LLNL) on 2023-04-21T21:44:24                    9546 1451
+                                                                  9546 1451
+Some neutron exit distributions, as noted, may be imported so all 9546 1451
+exit distributions have the same reference frame.                 9546 1451
+                                                                  9546 1451
+Changes by program patchGNDS.py:                                  9546 1451
+  photon distribution for MT=102: Am243 + photon.                 9546 1451
+                                                                  9546 1451
+                                                                  9546 1451
+AUG11 Added MT458 fission energy release data based on R. Vogt    9546 1451
+Energy-Dependent Fission Q Values Generalized for All Actinides   9546 1451
+Oct 8, 2008 report LLNL-TR-407620                                 9546 1451
+                                                                  9546 1451
+                                                                  9546 1451
+********************* DESCRIPTION / REFERENCES *******************9546 1451
+                                                                  9546 1451
+This file contains an evaluation of the products of the neutron-  9546 1451
+induced reaction on Am-242g, i.e., in its ground-state (1-) [as   9546 1451
+opposed to its long-lived (141yr) metastable state (5-,48.63keV)],9546 1451
+for neutron incident energies up to 20 MeV. The following cross-  9546 1451
+sections are present in this file: (n,n'), (n,2n), (n,3n), (n,f), 9546 1451
+and (n,gamma). Secondary neutrons double-differential spectra were9546 1451
+also obtained. Details on the evaluation procedure are given      9546 1451
+below.                                                            9546 1451
+                                                                  9546 1451
+A coupled-channels calculation (using the ECIS96 code by J.Raynal 9546 1451
+[Ra94]) was used to infer the total, elastic and reaction cross   9546 1451
+sections, and direct elastic and inelastic scattering cross       9546 1451
+sections and angular distributions for 33 excited states. The     9546 1451
+deformed optical potential used was developed by P.G.Young for    9546 1451
+Am-241 and Am-243 isotopes [Yo94,Yo95]. The details are as        9546 1451
+follows:                                                          9546 1451
+                                                                  9546 1451
+------------------------------------------------------------------9546 1451
+Well depth (MeV)                range (MeV)    geometry (fm)      9546 1451
+------------------------------------------------------------------9546 1451
+VR=52.102-27.75*X-0.30*E         0<=E<=30      rR=1.25, aR=0.60   9546 1451
+WD=5.3243-9.4995*X+0.45*E        0<=E<8        rD=1.24, aD=0.55   9546 1451
+WD=8.9243-9.4995*X-0.046*(E-8)   8<=E<=30                         9546 1451
+WV=0                             0<=E<8        rV=1.24, aV=0.55   9546 1451
+WV=-1.6+0.20*E                   8<=E<=30                         9546 1451
+Vso=6.2                          0<=E<=30      rso=1.01,aso=0.75  9546 1451
+------------------------------------------------------------------9546 1451
+                                                                  9546 1451
+where X=(N-Z)/A characterizes the isospin dependence. The ECIS96  9546 1451
+code [Ra94] was used for the present coupled-channels calculation.9546 1451
+                                                                  9546 1451
+The adopted first discrete levels for Am-242 are:                 9546 1451
+                                                                  9546 1451
+  No.  Energy (MeV)   Spin, Parity     K-Band                     9546 1451
+ --------------------------------------------                     9546 1451
+   1     0.00000           1,-           0                        9546 1451
+   2     0.04410           0,-           0                        9546 1451
+   3     0.04863           5,-                                    9546 1451
+   4     0.05290           3,-           0                        9546 1451
+   5     0.07580           2,-           0                        9546 1451
+   6     0.09900           2,-                                    9546 1451
+   7     0.11400           6,-                                    9546 1451
+   8     0.14800           5,-                                    9546 1451
+   9     0.14990           4,-                                    9546 1451
+  10     0.17100           5,+                                    9546 1451
+  11     0.19000           7,-                                    9546 1451
+  12     0.19760           3,-                                    9546 1451
+  13     0.23050           1,+                                    9546 1451
+  14     0.24410           3,-                                    9546 1451
+  15     0.26300           6,-                                    9546 1451
+  16     0.26301           7,-                                    9546 1451
+  17     0.27010           2,+                                    9546 1451
+  ..     .......           ...                                    9546 1451
+                                                                  9546 1451
+The four levels built on top of the K=0 rotational band are       9546 1451
+coupled in the present calculation.                               9546 1451
+                                                                  9546 1451
+(n,xn) and (n,gamma) cross sections, and secondary neutrons       9546 1451
+spectra were obtained with the GNASH nuclear reaction code [Yo96].9546 1451
+The neutron spin-dependent transmission coefficients were obtained9546 1451
+from the ECIS calculation.                                        9546 1451
+                                                                  9546 1451
+The neutron-induced fission cross section was taken directly from 9546 1451
+our evaluation work on Am-242m, where experimental data exist. No 9546 1451
+experimental data exist on Am-242g, due to the very short half-   9546 1451
+life of about 16 hours. The (n,f) cross section for Am-242m was   9546 1451
+obtained through a Bayesian analysis of available experimental    9546 1451
+data.                                                             9546 1451
+                                                                  9546 1451
+At low incident neutron energies, the resonance parameters were   9546 1451
+directly taken from the JENDL-3.3 evaluation file. The resolved   9546 1451
+resonance region extends up to 100eV, and the unresolved resonance9546 1451
+region up to 44.2838 keV. A smooth transition from 44.2838 keV to 9546 1451
+100 keV was established to connect to our ECIS results for the    9546 1451
+total cross section and to our fission and capture cross sections 9546 1451
+at higher energies.                                               9546 1451
+                                                                  9546 1451
+The sections MF1,MT452,455,456 and MF5,MT18 were also adopted from9546 1451
+the JENDL-3.3 evaluation.                                         9546 1451
+                                                                  9546 1451
+                                                                  9546 1451
+------------------------------ REFERENCES ------------------------9546 1451
+                                                                  9546 1451
+[Ra94] "Notes on ECIS94". J.Raynal. Technical report #CEA-N-2772, 9546 1451
+       CEA Saclay, France (1994).                                 9546 1451
+                                                                  9546 1451
+[Yo94] "Experience at Los Alamos with use of the optical model for9546 1451
+        applied nuclear data calculations". P.G.Young, LA-UR-94-  9546 1451
+        3104, LANL (1994). IAEA First Research Coordination       9546 1451
+        Meeting of 'Development of Reference Input Parameter      9546 1451
+        Library for Nuclear Model Calculations of Nuclear Data',  9546 1451
+        Sep. 19-23, 1994, Cervia, Italy.                          9546 1451
+                                                                  9546 1451
+[Yo95] "Status of optical model activities at Los Alamos National 9546 1451
+       Laboratory". P.G.Young, LA-UR-95-3654, LANL (1995).        9546 1451
+       Presented at the Second Research Coordination Meeting on   9546 1451
+       the 'Development of Reference Input Parameter Library for  9546 1451
+       Nuclear Model Calculations of Nuclear Data', Oct.30-Nov.3, 9546 1451
+       1995, Vienna, IAEA Headquarters.                           9546 1451
+                                                                  9546 1451
+[Yo96] "Comprehensive nuclear model calculations: theory and use  9546 1451
+       of the GNASH code". P.G.Young, E.D.Arthur,and M.B.Chadwick.9546 1451
+       A.Gandini & G.Reffo, Ed., Proceedings of the IAEA Workshop 9546 1451
+       on nuclear reaction data and nuclear reactors: physics,    9546 1451
+       design, and safety. Trieste, Italy, April 15-May 17, 1996, 9546 1451
+       pages 227-404, World Scientific Publishing, Ltd, Singapore,9546 1451
+       1998.                                                      9546 1451
+                                                                  9546 1451
+*************************** DICTIONARY ***************************9546 1451
+                                                                  9546 1451
+                                1        451        227          09546 1451
+                                1        452          7          09546 1451
+                                1        455          7          09546 1451
+                                1        456          7          09546 1451
+                                1        458         11          09546 1451
+                                2        151        285          09546 1451
+                                3          1         48          09546 1451
+                                3          2         48          09546 1451
+                                3          4         43          09546 1451
+                                3         16         16          09546 1451
+                                3         17          8          09546 1451
+                                3         18         31          09546 1451
+                                3         51         17          09546 1451
+                                3         52         17          09546 1451
+                                3         53         19          09546 1451
+                                3         54         16          09546 1451
+                                3         55         15          09546 1451
+                                3         56         15          09546 1451
+                                3         57         14          09546 1451
+                                3         58         14          09546 1451
+                                3         59         14          09546 1451
+                                3         60         14          09546 1451
+                                3         61         14          09546 1451
+                                3         62         13          09546 1451
+                                3         63         14          09546 1451
+                                3         64         14          09546 1451
+                                3         65         14          09546 1451
+                                3         66         14          09546 1451
+                                3         67         14          09546 1451
+                                3         68         14          09546 1451
+                                3         69         14          09546 1451
+                                3         70         13          09546 1451
+                                3         71         13          09546 1451
+                                3         72         13          09546 1451
+                                3         73         13          09546 1451
+                                3         74         13          09546 1451
+                                3         75         13          09546 1451
+                                3         76         13          09546 1451
+                                3         77         13          09546 1451
+                                3         78         13          09546 1451
+                                3         79         13          09546 1451
+                                3         80         13          09546 1451
+                                3         81         13          09546 1451
+                                3         82         13          09546 1451
+                                3         83         13          09546 1451
+                                3         91         27          09546 1451
+                                3        102         31          09546 1451
+                                4          2        198          09546 1451
+                                4         18          2          09546 1451
+                                4         51        131          09546 1451
+                                4         52        135          09546 1451
+                                4         53        186          09546 1451
+                                4         54        125          09546 1451
+                                4         55        120          09546 1451
+                                4         56        120          09546 1451
+                                4         57        116          09546 1451
+                                4         58        113          09546 1451
+                                4         59        109          09546 1451
+                                4         60        114          09546 1451
+                                4         61        110          09546 1451
+                                4         62        101          09546 1451
+                                4         63        108          09546 1451
+                                4         64        111          09546 1451
+                                4         65        111          09546 1451
+                                4         66        106          09546 1451
+                                4         67        103          09546 1451
+                                4         68        108          09546 1451
+                                4         69        108          09546 1451
+                                4         70        106          09546 1451
+                                4         71        106          09546 1451
+                                4         72        107          09546 1451
+                                4         73        102          09546 1451
+                                4         74        105          09546 1451
+                                4         75        102          09546 1451
+                                4         76         99          09546 1451
+                                4         77        105          09546 1451
+                                4         78        100          09546 1451
+                                4         79        103          09546 1451
+                                4         80         99          09546 1451
+                                4         81        105          09546 1451
+                                4         82        103          09546 1451
+                                4         83        102          09546 1451
+                                5         18        554          09546 1451
+                                6         16       2235          09546 1451
+                                6         17        367          09546 1451
+                                6         91       4893          09546 1451
+                               12        102        301          09546 1451
+                               14        102          1          09546 1451
+                               15        102        727          09546 1451
+ 0.000000+0 0.000000+0          0          0          0          09546 1  0
+ 9.524200+4 2.399801+2          0          2          0          09546 1452
+ 0.000000+0 0.000000+0          0          0          1         129546 1452
+         12          2          0          0          0          09546 1452
+ 1.000000-5 3.271800+0 4.000000+6 3.863800+0 6.000000+6 4.149450+09546 1452
+ 7.000000+6 4.287270+0 8.000000+6 4.425270+0 1.000000+7 4.678270+09546 1452
+ 1.200000+7 4.929270+0 1.223090+7 4.955270+0 1.400000+7 5.159270+09546 1452
+ 1.600000+7 5.382270+0 1.800000+7 5.599270+0 2.000000+7 5.812270+09546 1452
+ 0.000000+0 0.000000+0          0          0          0          09546 1  0
+ 9.524200+4 2.399801+2          0          2          0          09546 1455
+ 0.000000+0 0.000000+0          0          0          6          09546 1455
+ 1.350000-2 3.010000-2 1.152000-1 2.994000-1 8.646000-1 2.810700+09546 1455
+ 0.000000+0 0.000000+0          0          0          1          49546 1455
+          4          2          0          0          0          09546 1455
+ 1.000000-5 7.800000-3 4.000000+6 7.800000-3 7.000000+6 4.270000-39546 1455
+ 2.000000+7 4.270000-3                                            9546 1455
+ 0.000000+0 0.000000+0          0          0          0          09546 1  0
+ 9.524200+4 2.399801+2          0          2          0          09546 1456
+ 0.000000+0 0.000000+0          0          0          1         129546 1456
+         12          2          0          0          0          09546 1456
+ 1.000000-5 3.264000+0 4.000000+6 3.856000+0 6.000000+6 4.144000+09546 1456
+ 7.000000+6 4.283000+0 8.000000+6 4.421000+0 1.000000+7 4.674000+09546 1456
+ 1.200000+7 4.925000+0 1.223090+7 4.951000+0 1.400000+7 5.155000+09546 1456
+ 1.600000+7 5.378000+0 1.800000+7 5.595000+0 2.000000+7 5.808000+09546 1456
+ 0.000000+0 0.000000+0          0          0          0          09546 1  0
+ 9.524200+4 2.399801+2          0          0          0          09546 1458
+ 0.000000+0 0.000000+0          0          2         54         279546 1458
+ 1.800888+8 9.904882+6 7.150000+6 6.300000+4 1.803000+4 7.700000+29546 1458
+ 6.949000+6 6.949000+4 5.675684+6 2.903658+4 5.836353+6 1.935772+49546 1458
+ 7.845685+6 2.903658+4 2.057178+8 1.463876+7 2.135635+8 1.521760+79546 1458
+-5.440482-1 2.992265-2 3.473000-1 1.710000-2-1.117000-3 2.155000-49546 1458
+ 1.693000-2 1.693000-4-7.500000-2 7.500000-3-7.500000-2 7.500000-39546 1458
+-1.000000-1 1.000000-2-1.330935+0 3.334525-1-1.430935+0 3.860086-19546 1458
+ 0.000000+0 0.000000+0 2.294000-9 8.95000-10 3.88200-11 1.11900-119546 1458
+ 0.000000+0 0.000000+0 0.000000+0 0.000000+0 0.000000+0 0.000000+09546 1458
+ 0.000000+0 0.000000+0 2.332820-9 1.131612-9 2.332820-9 1.131612-99546 1458
+ 0.000000+0 0.000000+0          0          0          0          09546 1  0
+ 0.000000+0 0.000000+0          0          0          0          09546 0  0
+ 0.000000+0 0.000000+0          0          0          0          09546 0  0
+ 0.000000+0 0.000000+0          0          0          0          09546 0  0
+ 0.000000+0 0.000000+0          0          0          0          09546 0  0
+ 0.000000+0 0.000000+0          0          0          0          09546 0  0
+ 0.000000+0 0.000000+0          0          0          0          09546 0  0
+ 0.000000+0 0.000000+0          0          0          0          09546 0  0
+ 0.000000+0 0.000000+0          0          0          0          09546 0  0
+ 0.000000+0 0.000000+0          0          0          0          09546 0  0
+ 0.000000+0 0.000000+0          0          0          0          0   0 0  0
+ 0.000000+0 0.000000+0          0          0          0          0  -1 0  0
+                                                                    -1 0  0    0

@@ -319,10 +319,19 @@ class IncidentNeutron:
             mat = material if material is not None else Material(filename)
             metadata = mat.section_data[1, 451]
 
-            # Name the nuclide from the evaluation rather than the ACE table:
+            # Identify the nuclide from the evaluation rather than the ACE table:
             # the ZAID does not encode higher metastable states, so from_ace
             # gets names like Hf178_m2 wrong.
+            #
+            # metastable has to be corrected too, not just the name. The ZAID is
+            # ambiguous for Am242 in particular: under the MCNP convention 95242
+            # denotes the *metastable* nuclide and 95642 the ground state, yet the
+            # ground-state evaluation also carries ZA=95242, so from_ace reads it
+            # as m1. Left uncorrected that mismatch makes
+            # FissionEnergyRelease.from_endf reject its own evaluation, which took
+            # out both Am242 and Am242_m1. The evaluation is authoritative here.
             Z, A = divmod(metadata['ZA'], 1000)
+            data.metastable = metadata['LISO']
             data.name = gnds_name(Z, A, metadata['LISO'])
 
             # Add the 0 K elastic scattering cross section from the PENDF tape
