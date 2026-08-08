@@ -403,7 +403,13 @@ def _read_ascii(
         jxs = np.fromstring(datastr, dtype=int, sep=' ')
 
         datastr = '0.0 ' + ''.join(lines[_ACE_HEADER_SIZE:_ACE_HEADER_SIZE + n_lines])
-        xss = np.fromstring(datastr, sep=' ')
+        try:
+            xss = np.fromstring(datastr, sep=' ')
+        except ValueError:
+            # numpy 2 raises on a token it cannot parse where numpy 1 stopped
+            # short and returned what it had. The recovery below keys off a
+            # short array, so give it one rather than letting the read fail.
+            xss = np.empty(0)
 
         # When NJOY writes an ACE file, any values less than 1e-100 actually
         # get written without the 'e'. Thus, what we do here is check
