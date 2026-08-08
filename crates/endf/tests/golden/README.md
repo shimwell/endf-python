@@ -7,6 +7,14 @@ reader over the evaluation the `SOURCE` line names, and compares.
 This is what makes the port safe: the Rust crate is not being written against
 the ENDF-102 manual alone, it is being held to a reader that already works.
 
+## ACE fixtures
+
+A `.ace` fixture is dumped differently — ACE has tables, not materials — so its
+golden opens with `KIND ace` and the Rust side reads it through
+`endf::ace` instead. The XSS array runs to hundreds of thousands of numbers, so
+the dump records a spread across it plus both ends and every JXS entry point,
+which is where a consumer actually looks. Everything else is recorded in full.
+
 ## Adding an evaluation
 
 1. Drop the file in `tests/data/`.

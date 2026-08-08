@@ -19,6 +19,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod ace;
 pub mod data;
 pub mod error;
 pub mod fission_energy;

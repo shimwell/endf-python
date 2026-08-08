@@ -48,7 +48,7 @@ GOLDEN_DIR = ROOT / "crates" / "endf" / "tests" / "golden"
 #: coverage goes.
 FIXTURE_DIRS = [ROOT / "tests", ROOT / "tests" / "data"]
 
-FIXTURE_SUFFIXES = {".endf", ".dat"}
+FIXTURE_SUFFIXES = {".endf", ".dat", ".ace"}
 
 #: How many interior sample points to record per tabulated function, on top of
 #: the ones the region boundaries force. Enough to exercise each interpolation
@@ -790,6 +790,42 @@ def dump_mf40(d: Dump, path: str, mt: int, section: dict) -> None:
             dump_mf33_subsection(d, f"{sp}/subsubsections/{j}", ss)
 
 
+#: How many XSS values to record per ACE table. The array runs to hundreds of
+#: thousands of numbers; a spread across it, plus both ends and every JXS entry
+#: point, pins the parse without a golden file the size of the library.
+ACE_XSS_SAMPLES = 2000
+
+
+def ace_xss_indices(n: int, jxs) -> list[int]:
+    """Which XSS indices to record. Mirrored exactly on the Rust side."""
+    idx = set(range(0, n, max(1, n // ACE_XSS_SAMPLES)))
+    idx.update(range(0, min(50, n)))
+    idx.update(range(max(0, n - 50), n))
+    # The JXS values are offsets into XSS: where a consumer actually looks.
+    for j in jxs:
+        if 0 <= int(j) < n:
+            idx.add(int(j))
+    return sorted(idx)
+
+
+def dump_ace(d: Dump, path: str, table) -> None:
+    d.text(f"{path}/name", table.name)
+    d.float(f"{path}/atomic_weight_ratio", table.atomic_weight_ratio)
+    d.float(f"{path}/kT", table.kT)
+    d.float(f"{path}/temperature", table.temperature)
+    d.int(f"{path}/zaid", table.zaid)
+    # The suffix letter, which both sides spell the same way.
+    d.text(f"{path}/data_type", table.data_type.value)
+    d.ints(f"{path}/pairs_iz", [iz for iz, _ in table.pairs])
+    d.floats(f"{path}/pairs_aw", [aw for _, aw in table.pairs])
+    d.ints(f"{path}/nxs", table.nxs)
+    d.ints(f"{path}/jxs", table.jxs)
+    d.int(f"{path}/xss_len", len(table.xss))
+    idx = ace_xss_indices(len(table.xss), table.jxs)
+    d.ints(f"{path}/xss_idx", idx)
+    d.floats(f"{path}/xss_val", [table.xss[i] for i in idx])
+
+
 DUMPERS = {
     1: dump_mf1,
     2: dump_mf2,
@@ -816,6 +852,9 @@ DUMPERS = {
 
 
 def dump(path: Path, out) -> None:
+    if path.suffix.lower() == ".ace":
+        dump_ace_file(path, out)
+        return
     materials = endf.get_materials(path)
     source = path.relative_to(ROOT).as_posix()
     d = Dump(out)
@@ -839,6 +878,23 @@ def dump(path: Path, out) -> None:
             dumper = DUMPERS.get(mf)
             if dumper is not None:
                 dumper(d, f"{m}/{mf}/{mt}", mt, material[mf, mt])
+
+
+def dump_ace_file(path: Path, out) -> None:
+    """An ACE fixture, which has tables rather than materials."""
+    import endf.ace
+
+    tables = endf.ace.get_tables(path)
+    source = path.relative_to(ROOT).as_posix()
+    d = Dump(out)
+
+    out.write(f"# golden reference generated from {source} by the Python reader\n")
+    out.write("# regenerate with: python tools/dump_golden.py\n")
+    out.write("KIND ace\n")
+    out.write(f"SOURCE {source}\n")
+    out.write(f"TABLES {len(tables)}\n")
+    for i, table in enumerate(tables):
+        dump_ace(d, str(i), table)
 
 
 def fixtures() -> list[Path]:

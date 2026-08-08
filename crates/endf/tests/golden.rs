@@ -19,6 +19,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use endf::ace;
 use endf::mf::atomic::ElectroAtomicDistribution;
 use endf::mf::covariance::Mf33Subsection;
 use endf::mf::mf1::{FissionEnergyRelease, Nu, FISSION_ENERGY_COMPONENTS};
@@ -491,6 +492,53 @@ fn dump_mf33_subsection(d: &mut Dump, sp: &str, sub: &Mf33Subsection) {
             }
         }
     }
+}
+
+/// Mirrors `ACE_XSS_SAMPLES` in `tools/dump_golden.py`.
+const ACE_XSS_SAMPLES: usize = 2000;
+
+/// Mirrors `ace_xss_indices` in `tools/dump_golden.py`, index for index.
+fn ace_xss_indices(n: usize, jxs: &[i64]) -> Vec<usize> {
+    let mut idx: BTreeSet<usize> = (0..n).step_by((n / ACE_XSS_SAMPLES).max(1)).collect();
+    idx.extend(0..50.min(n));
+    idx.extend(n.saturating_sub(50)..n);
+    // The JXS values are offsets into XSS: where a consumer actually looks.
+    for &j in jxs {
+        if j >= 0 && (j as usize) < n {
+            idx.insert(j as usize);
+        }
+    }
+    idx.into_iter().collect()
+}
+
+fn dump_ace_table(d: &mut Dump, path: &str, t: &ace::Table) {
+    d.text(format!("{path}/name"), &t.name);
+    d.float(format!("{path}/atomic_weight_ratio"), t.atomic_weight_ratio);
+    d.float(format!("{path}/kT"), t.kt);
+    d.float(format!("{path}/temperature"), t.temperature());
+    d.int(format!("{path}/zaid"), t.zaid().unwrap());
+    d.text(
+        format!("{path}/data_type"),
+        &t.data_type().unwrap().suffix().to_string(),
+    );
+    d.ints(
+        format!("{path}/pairs_iz"),
+        t.pairs.iter().map(|p| p.0).collect(),
+    );
+    d.floats(
+        format!("{path}/pairs_aw"),
+        t.pairs.iter().map(|p| p.1).collect(),
+    );
+    d.ints(format!("{path}/nxs"), t.nxs.clone());
+    d.ints(format!("{path}/jxs"), t.jxs.clone());
+    d.int(format!("{path}/xss_len"), t.xss.len() as i64);
+    let idx = ace_xss_indices(t.xss.len(), &t.jxs);
+    let values: Vec<f64> = idx.iter().map(|&i| t.xss[i]).collect();
+    d.ints(
+        format!("{path}/xss_idx"),
+        idx.iter().map(|&i| i as i64).collect(),
+    );
+    d.floats(format!("{path}/xss_val"), values);
 }
 
 fn dump_section(d: &mut Dump, path: &str, section: &Section) {
@@ -1195,6 +1243,9 @@ fn golden_dir() -> PathBuf {
 
 /// The golden file, split into the structural records and the value map.
 struct Golden {
+    /// "ace" for an ACE fixture; ENDF materials otherwise.
+    kind: String,
+    n_tables: usize,
     source: String,
     n_materials: usize,
     /// (material index, MF, MT) -> body line count.
@@ -1206,6 +1257,8 @@ struct Golden {
 
 fn parse_golden(text: &str, name: &str) -> Golden {
     let mut g = Golden {
+        kind: String::new(),
+        n_tables: 0,
         source: String::new(),
         n_materials: 0,
         sections: BTreeMap::new(),
@@ -1222,6 +1275,8 @@ fn parse_golden(text: &str, name: &str) -> Golden {
         let key = parts.next().unwrap_or("");
         let f: Vec<&str> = parts.collect();
         match key {
+            "KIND" => g.kind = f[0].to_string(),
+            "TABLES" => g.n_tables = f[0].parse().unwrap(),
             "SOURCE" => g.source = f[0].to_string(),
             "MATERIALS" => g.n_materials = f[0].parse().unwrap(),
             "MAT" => {
@@ -1270,62 +1325,28 @@ fn parse_golden(text: &str, name: &str) -> Golden {
     g
 }
 
-/// Compare one golden file against the Rust reader. Returns paths compared.
-fn check(golden_path: &Path) -> usize {
-    let text = std::fs::read_to_string(golden_path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", golden_path.display()));
-    let name = golden_path
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
-    let g = parse_golden(&text, &name);
-
-    let source_path = repo_root().join(&g.source);
-    let endf_text = std::fs::read_to_string(&source_path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", source_path.display()));
-
-    let materials = materials_from_str(&endf_text)
-        .unwrap_or_else(|e| panic!("{name}: the Rust reader failed on {}: {e}", g.source));
-
-    assert_eq!(materials.len(), g.n_materials, "{name}: material count");
-
-    let mut d = Dump::default();
-    let mut sections: BTreeMap<(usize, i32, i32), usize> = BTreeMap::new();
-    for (m, material) in materials.iter().enumerate() {
-        assert_eq!(
-            Some(&material.mat),
-            g.mats.get(&m),
-            "{name}: material {m} number"
-        );
-        for (&(mf, mt), body) in &material.section_text {
-            sections.insert((m, mf, mt), body.lines().count());
-        }
-        for (&(mf, mt), section) in &material.section_data {
-            dump_section(&mut d, &format!("{m}/{mf}/{mt}"), section);
-        }
-    }
-
-    assert_eq!(sections, g.sections, "{name}: section splitting differs");
-
-    // Paths on one side and not the other: a renamed, dropped or added field.
-    let ours: BTreeSet<&String> = d.map.keys().collect();
-    let theirs: BTreeSet<&String> = g.values.keys().collect();
-    let missing: Vec<&&String> = theirs.difference(&ours).take(10).collect();
-    let extra: Vec<&&String> = ours.difference(&theirs).take(10).collect();
+/// Compare the two `path -> value` maps whole.
+///
+/// Shared by the ENDF and ACE paths: a field renamed, dropped or added shows up
+/// as a path on one side and not the other, whatever produced it.
+fn compare(name: &str, ours: &BTreeMap<String, Value>, theirs: &BTreeMap<String, Value>) {
+    let ours_keys: BTreeSet<&String> = ours.keys().collect();
+    let theirs_keys: BTreeSet<&String> = theirs.keys().collect();
+    let missing: Vec<&&String> = theirs_keys.difference(&ours_keys).take(10).collect();
+    let extra: Vec<&&String> = ours_keys.difference(&theirs_keys).take(10).collect();
     assert!(
         missing.is_empty(),
         "{name}: the Rust reader did not produce {} paths, e.g. {missing:?}",
-        theirs.difference(&ours).count()
+        theirs_keys.difference(&ours_keys).count()
     );
     assert!(
         extra.is_empty(),
         "{name}: the Rust reader produced {} paths the Python reader does not, e.g. {extra:?}",
-        ours.difference(&theirs).count()
+        ours_keys.difference(&theirs_keys).count()
     );
 
-    for (path, want) in &g.values {
-        let got = &d.map[path];
+    for (path, want) in theirs {
+        let got = &ours[path];
         assert_eq!(
             got.kind(),
             want.kind(),
@@ -1359,6 +1380,60 @@ fn check(golden_path: &Path) -> usize {
             _ => assert_eq!(got, want, "{name}: {path}"),
         }
     }
+}
+
+/// Compare one golden file against the Rust reader. Returns paths compared.
+fn check(golden_path: &Path) -> usize {
+    let text = std::fs::read_to_string(golden_path)
+        .unwrap_or_else(|e| panic!("reading {}: {e}", golden_path.display()));
+    let name = golden_path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    let g = parse_golden(&text, &name);
+
+    let source_path = repo_root().join(&g.source);
+
+    if g.kind == "ace" {
+        let tables = ace::get_tables(&source_path)
+            .unwrap_or_else(|e| panic!("{name}: the Rust reader failed on {}: {e}", g.source));
+        assert_eq!(tables.len(), g.n_tables, "{name}: table count");
+        let mut d = Dump::default();
+        for (i, table) in tables.iter().enumerate() {
+            dump_ace_table(&mut d, &i.to_string(), table);
+        }
+        compare(&name, &d.map, &g.values);
+        return g.values.len();
+    }
+
+    let endf_text = std::fs::read_to_string(&source_path)
+        .unwrap_or_else(|e| panic!("reading {}: {e}", source_path.display()));
+
+    let materials = materials_from_str(&endf_text)
+        .unwrap_or_else(|e| panic!("{name}: the Rust reader failed on {}: {e}", g.source));
+
+    assert_eq!(materials.len(), g.n_materials, "{name}: material count");
+
+    let mut d = Dump::default();
+    let mut sections: BTreeMap<(usize, i32, i32), usize> = BTreeMap::new();
+    for (m, material) in materials.iter().enumerate() {
+        assert_eq!(
+            Some(&material.mat),
+            g.mats.get(&m),
+            "{name}: material {m} number"
+        );
+        for (&(mf, mt), body) in &material.section_text {
+            sections.insert((m, mf, mt), body.lines().count());
+        }
+        for (&(mf, mt), section) in &material.section_data {
+            dump_section(&mut d, &format!("{m}/{mf}/{mt}"), section);
+        }
+    }
+
+    assert_eq!(sections, g.sections, "{name}: section splitting differs");
+
+    compare(&name, &d.map, &g.values);
 
     g.values.len()
 }

@@ -19,6 +19,10 @@ pub enum Error {
     BadNdigit {
         ndigit: i64,
     },
+    /// An ACE table that could not be read.
+    BadAceTable {
+        what: String,
+    },
     /// A name that is not a nuclide in GNDS convention.
     BadNuclideName {
         name: String,
@@ -50,6 +54,7 @@ impl fmt::Display for Error {
             Error::BadNdigit { ndigit } => {
                 write!(f, "INTG record has NDIGIT={ndigit}, expected 2 through 6")
             }
+            Error::BadAceTable { what } => write!(f, "could not read the ACE table: {what}"),
             Error::BadNuclideName { name } => {
                 write!(f, "{name:?} is not a nuclide name in GNDS format")
             }
