@@ -662,6 +662,223 @@ fn dump_section(d: &mut Dump, path: &str, section: &Section) {
             }
         }
 
+        Section::Mf7Mt2(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/LTHR"), s.lthr);
+            if let Some(c) = &s.coherent {
+                d.float(format!("{path}/coherent/0/T"), c.t);
+                d.int(format!("{path}/coherent/0/LT"), c.lt);
+                d.tab1(&format!("{path}/coherent/0/S"), &c.s);
+                for (i, o) in c.others.iter().enumerate() {
+                    let tp = format!("{path}/coherent/{}", i + 1);
+                    d.float(format!("{tp}/T"), o.t);
+                    d.int(format!("{tp}/LI"), o.li);
+                    d.floats(format!("{tp}/S"), o.s.clone());
+                }
+            }
+            if let Some(i) = &s.incoherent {
+                d.float(format!("{path}/incoherent/SB"), i.sb);
+                d.tab1(&format!("{path}/incoherent/W"), &i.w);
+            }
+        }
+
+        Section::Mf7Mt4(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            for (key, value) in [
+                ("LAT", s.lat),
+                ("LASYM", s.lasym),
+                ("LLN", s.lln),
+                ("NI", s.ni),
+                ("NS", s.ns),
+            ] {
+                d.int(format!("{path}/{key}"), value);
+            }
+            d.floats(format!("{path}/B"), s.b.clone());
+            if let Some(bi) = &s.beta_int {
+                d.tab2(&format!("{path}/beta_int"), bi);
+                d.int(format!("{path}/NB"), s.nb);
+            }
+            for (i, law) in s.beta_data.iter().enumerate() {
+                let tp = format!("{path}/beta_data/{i}/0");
+                d.float(format!("{tp}/T"), law.t);
+                d.float(format!("{tp}/beta"), law.beta);
+                d.int(format!("{tp}/LT"), law.lt);
+                d.tab1(&format!("{tp}/S"), &law.s);
+                for (j, o) in law.others.iter().enumerate() {
+                    let tp = format!("{path}/beta_data/{i}/{}", j + 1);
+                    d.float(format!("{tp}/T"), o.t);
+                    d.float(format!("{tp}/beta"), o.beta);
+                    d.int(format!("{tp}/LT"), o.lt);
+                    d.floats(format!("{tp}/S"), o.s.clone());
+                }
+            }
+            for (i, t) in s.teff.iter().enumerate() {
+                d.tab1(&format!("{path}/Teff/{i}"), t);
+            }
+        }
+
+        Section::Mf7Mt451(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/NA"), s.na);
+            for (i, e) in s.elements.iter().enumerate() {
+                let ep = format!("{path}/elements/{i}");
+                d.int(format!("{ep}/NAS"), e.nas);
+                d.int(format!("{ep}/NI"), e.ni);
+                for (key, values) in [
+                    ("ZAI", &e.zai),
+                    ("LISI", &e.lisi),
+                    ("AFI", &e.afi),
+                    ("AWRI", &e.awri),
+                    ("SFI", &e.sfi),
+                ] {
+                    d.floats(format!("{ep}/{key}"), values.clone());
+                }
+            }
+        }
+
+        Section::Mf8(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            for (key, value) in [("LIS", s.lis), ("LISO", s.liso), ("NS", s.ns), ("NO", s.no)] {
+                d.int(format!("{path}/{key}"), value);
+            }
+            for (i, sub) in s.subsections.iter().enumerate() {
+                let sp = format!("{path}/subsections/{i}");
+                d.float(format!("{sp}/ZAP"), sub.zap);
+                d.float(format!("{sp}/ELFS"), sub.elfs);
+                d.int(format!("{sp}/LMF"), sub.lmf);
+                d.int(format!("{sp}/LFS"), sub.lfs);
+                if let Some(nd) = sub.nd {
+                    d.int(format!("{sp}/ND"), nd);
+                    for (key, values) in [
+                        ("HL", &sub.hl),
+                        ("RTYP", &sub.rtyp),
+                        ("ZAN", &sub.zan),
+                        ("BR", &sub.br),
+                        ("END", &sub.end),
+                        ("CT", &sub.ct),
+                    ] {
+                        d.floats(format!("{sp}/{key}"), values.clone());
+                    }
+                }
+            }
+        }
+
+        Section::Mf8Mt454(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/LE"), s.le);
+            for (i, y) in s.yields.iter().enumerate() {
+                let yp = format!("{path}/yields/{i}");
+                d.float(format!("{yp}/E"), y.energy);
+                d.int(format!("{yp}/NN"), y.nn);
+                d.int(format!("{yp}/NFP"), y.nfp);
+                d.int(format!("{yp}/LE_or_I"), y.le_or_interpolation);
+                for (j, p) in y.products.iter().enumerate() {
+                    let pp = format!("{yp}/products/{j}");
+                    d.float(format!("{pp}/ZAFP"), p.zafp);
+                    d.float(format!("{pp}/FPS"), p.fps);
+                    d.floats(format!("{pp}/Y"), vec![p.y.0, p.y.1]);
+                }
+            }
+        }
+
+        Section::Mf8Mt457(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            for (key, value) in [
+                ("LIS", s.lis),
+                ("LISO", s.liso),
+                ("NST", s.nst),
+                ("NSP", s.nsp),
+            ] {
+                d.int(format!("{path}/{key}"), value);
+            }
+            d.float(format!("{path}/SPI"), s.spi);
+            d.float(format!("{path}/PAR"), s.par);
+            if s.nst == 1 {
+                return;
+            }
+            if let Some(hl) = s.half_life {
+                d.floats(format!("{path}/T1_2"), vec![hl.0, hl.1]);
+            }
+            d.int(format!("{path}/NC"), s.nc);
+            d.floats(
+                format!("{path}/Ex"),
+                s.ex.iter().flat_map(|&(a, b)| [a, b]).collect(),
+            );
+            d.int(format!("{path}/NDK"), s.ndk);
+            for (i, m) in s.modes.iter().enumerate() {
+                let mp = format!("{path}/modes/{i}");
+                d.float(format!("{mp}/RTYP"), m.rtyp);
+                d.float(format!("{mp}/RFS"), m.rfs);
+                d.floats(format!("{mp}/Q"), vec![m.q.0, m.q.1]);
+                d.floats(format!("{mp}/BR"), vec![m.br.0, m.br.1]);
+            }
+            for (i, sp_) in s.spectra.iter().enumerate() {
+                let sp = format!("{path}/spectra/{i}");
+                d.float(format!("{sp}/STYP"), sp_.styp);
+                d.int(format!("{sp}/LCON"), sp_.lcon);
+                d.int(format!("{sp}/LCOV"), sp_.lcov);
+                d.int(format!("{sp}/NER"), sp_.ner);
+                d.floats(format!("{sp}/FD"), vec![sp_.fd.0, sp_.fd.1]);
+                d.floats(format!("{sp}/ER_AV"), vec![sp_.er_av.0, sp_.er_av.1]);
+                d.floats(format!("{sp}/FC"), vec![sp_.fc.0, sp_.fc.1]);
+                for (j, r) in sp_.discrete.iter().enumerate() {
+                    let rp = format!("{sp}/discrete/{j}");
+                    d.floats(format!("{rp}/ER"), vec![r.er.0, r.er.1]);
+                    d.float(format!("{rp}/RTYP"), r.rtyp);
+                    d.float(format!("{rp}/TYPE"), r.type_);
+                    d.floats(format!("{rp}/RI"), vec![r.ri.0, r.ri.1]);
+                    for (key, value) in [
+                        ("RIS", r.ris),
+                        ("RICC", r.ricc),
+                        ("RICK", r.rick),
+                        ("RICL", r.ricl),
+                    ] {
+                        if let Some(v) = value {
+                            d.floats(format!("{rp}/{key}"), vec![v.0, v.1]);
+                        }
+                    }
+                }
+                if let Some(c) = &sp_.continuous {
+                    d.float(format!("{sp}/continuous/RTYP"), c.rtyp);
+                    d.tab1(&format!("{sp}/continuous/RP"), &c.rp);
+                }
+                if let Some(c) = &sp_.continuous_covariance {
+                    d.int(format!("{sp}/cont_cov/LB"), c.lb);
+                    d.floats(format!("{sp}/cont_cov/Ek"), c.ek.clone());
+                    d.floats(format!("{sp}/cont_cov/Fk"), c.fk.clone());
+                }
+                if let Some(c) = &sp_.discrete_covariance {
+                    d.int(format!("{sp}/disc_cov/LS"), c.ls);
+                    d.int(format!("{sp}/disc_cov/LB"), c.lb);
+                    d.int(format!("{sp}/disc_cov/NE"), c.ne);
+                    d.int(format!("{sp}/disc_cov/NERP"), c.nerp);
+                    d.floats(format!("{sp}/disc_cov/Ek"), c.ek.clone());
+                    d.floats(format!("{sp}/disc_cov/Fkk"), c.fkk.clone());
+                }
+            }
+        }
+
+        Section::Mf9Mf10(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/LIS"), s.lis);
+            d.int(format!("{path}/NS"), s.ns);
+            for (i, level) in s.levels.iter().enumerate() {
+                let lp = format!("{path}/levels/{i}");
+                d.float(format!("{lp}/QM"), level.qm);
+                d.float(format!("{lp}/QI"), level.qi);
+                d.int(format!("{lp}/IZAP"), level.izap);
+                d.int(format!("{lp}/LFS"), level.lfs);
+                d.tab1(&format!("{lp}/func"), &level.func);
+            }
+        }
+
         Section::Unparsed { .. } => {}
     }
 }

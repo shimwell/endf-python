@@ -34,6 +34,20 @@ pub enum Section {
     Mf5(Box<mf::mf5::Mf5>),
     /// MF=6, energy-angle distributions of reaction products.
     Mf6(Box<mf::mf6::Mf6>),
+    /// MF=7 MT=2, elastic thermal scattering.
+    Mf7Mt2(Box<mf::mf7::Mf7Mt2>),
+    /// MF=7 MT=4, incoherent inelastic thermal scattering.
+    Mf7Mt4(Box<mf::mf7::Mf7Mt4>),
+    /// MF=7 MT=451, thermal scattering general information.
+    Mf7Mt451(Box<mf::mf7::Mf7Mt451>),
+    /// MF=8, radioactive nuclide production.
+    Mf8(Box<mf::mf8::Mf8>),
+    /// MF=8 MT=454 or MT=459, fission product yields.
+    Mf8Mt454(Box<mf::mf8::Mf8Mt454>),
+    /// MF=8 MT=457, radioactive decay data.
+    Mf8Mt457(Box<mf::mf8::Mf8Mt457>),
+    /// MF=9 or MF=10, isomer multiplicities and production cross sections.
+    Mf9Mf10(Box<mf::mf8::Mf9Mf10>),
     Unparsed {
         mf: i32,
         mt: i32,
@@ -203,6 +217,46 @@ impl Material {
         }
     }
 
+    /// The MF=8 radioactive production data for a reaction.
+    pub fn mf8(&self, mt: i32) -> Option<&mf::mf8::Mf8> {
+        match self.section_data.get(&(8, mt))? {
+            Section::Mf8(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=8 MT=457 radioactive decay data.
+    pub fn mf8_mt457(&self) -> Option<&mf::mf8::Mf8Mt457> {
+        match self.section_data.get(&(8, 457))? {
+            Section::Mf8Mt457(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Fission product yields: MT=454 independent, MT=459 cumulative.
+    pub fn mf8_mt454(&self, mt: i32) -> Option<&mf::mf8::Mf8Mt454> {
+        match self.section_data.get(&(8, mt))? {
+            Section::Mf8Mt454(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// MF=9 isomer multiplicities for a reaction.
+    pub fn mf9(&self, mt: i32) -> Option<&mf::mf8::Mf9Mf10> {
+        match self.section_data.get(&(9, mt))? {
+            Section::Mf9Mf10(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// MF=10 isomer production cross sections for a reaction.
+    pub fn mf10(&self, mt: i32) -> Option<&mf::mf8::Mf9Mf10> {
+        match self.section_data.get(&(10, mt))? {
+            Section::Mf9Mf10(s) => Some(s),
+            _ => None,
+        }
+    }
+
     /// The MF=2 MT=151 resonance parameters.
     pub fn mf2(&self) -> Option<&mf::mf2::Mf2> {
         match self.section_data.get(&(2, 151))? {
@@ -275,6 +329,13 @@ fn parse_section(mf: i32, mt: i32, text: &str) -> Result<Section> {
         (4, _) => Section::Mf4(Box::new(mf::mf4::parse_mf4(&mut r)?)),
         (5, _) => Section::Mf5(Box::new(mf::mf5::parse_mf5(&mut r)?)),
         (6, _) => Section::Mf6(Box::new(mf::mf6::parse_mf6(&mut r)?)),
+        (7, 2) => Section::Mf7Mt2(Box::new(mf::mf7::parse_mf7_mt2(&mut r)?)),
+        (7, 4) => Section::Mf7Mt4(Box::new(mf::mf7::parse_mf7_mt4(&mut r)?)),
+        (7, 451) => Section::Mf7Mt451(Box::new(mf::mf7::parse_mf7_mt451(&mut r)?)),
+        (8, 454) | (8, 459) => Section::Mf8Mt454(Box::new(mf::mf8::parse_mf8_mt454(&mut r)?)),
+        (8, 457) => Section::Mf8Mt457(Box::new(mf::mf8::parse_mf8_mt457(&mut r)?)),
+        (8, _) => Section::Mf8(Box::new(mf::mf8::parse_mf8(&mut r)?)),
+        (9, _) | (10, _) => Section::Mf9Mf10(Box::new(mf::mf8::parse_mf9_mf10(&mut r, mf as i64)?)),
         _ => Section::Unparsed { mf, mt },
     })
 }

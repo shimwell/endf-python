@@ -412,6 +412,154 @@ def dump_mf6(d: Dump, path: str, mt: int, section: dict) -> None:
                 d.tab1(f"{sp}/mu/{k}/f", entry["f"])
 
 
+def _pairs(d: Dump, path: str, values) -> None:
+    """A list of (value, uncertainty) pairs, flattened."""
+    d.floats(path, [v for pair in values for v in pair])
+
+
+def dump_mf7(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    if mt == 2:
+        d.int(f"{path}/LTHR", section["LTHR"])
+        for i, t in enumerate(section.get("coherent", [])):
+            tp = f"{path}/coherent/{i}"
+            d.float(f"{tp}/T", t["T"])
+            if "LT" in t:
+                d.int(f"{tp}/LT", t["LT"])
+                d.tab1(f"{tp}/S", t["S"])
+            else:
+                d.int(f"{tp}/LI", t["LI"])
+                d.floats(f"{tp}/S", t["S"])
+        if "incoherent" in section:
+            d.float(f"{path}/incoherent/SB", section["incoherent"]["SB"])
+            d.tab1(f"{path}/incoherent/W", section["incoherent"]["W"])
+    elif mt == 4:
+        for key in ("LAT", "LASYM", "LLN", "NI", "NS"):
+            d.int(f"{path}/{key}", section[key])
+        d.floats(f"{path}/B", section["B"])
+        if "beta_int" in section:
+            d.tab2(f"{path}/beta_int", section["beta_int"])
+            d.int(f"{path}/NB", section["NB"])
+        for i, block in enumerate(section.get("beta_data", [])):
+            for j, t in enumerate(block):
+                tp = f"{path}/beta_data/{i}/{j}"
+                d.float(f"{tp}/T", t["T"])
+                d.float(f"{tp}/beta", t["beta"])
+                d.int(f"{tp}/LT", t["LT"])
+                if j == 0:
+                    d.tab1(f"{tp}/S", t["S"])
+                else:
+                    d.floats(f"{tp}/S", t["S"])
+        for i, t in enumerate(section.get("Teff", [])):
+            d.tab1(f"{path}/Teff/{i}", t)
+    elif mt == 451:
+        d.int(f"{path}/NA", section["NA"])
+        for i, e in enumerate(section["elements"]):
+            ep = f"{path}/elements/{i}"
+            d.int(f"{ep}/NAS", e["NAS"])
+            d.int(f"{ep}/NI", e["NI"])
+            for key in ("ZAI", "LISI", "AFI", "AWRI", "SFI"):
+                d.floats(f"{ep}/{key}", e[key])
+
+
+def dump_mf8(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+
+    if mt in (454, 459):
+        d.int(f"{path}/LE", section["LE"])
+        for i, y in enumerate(section["yields"]):
+            yp = f"{path}/yields/{i}"
+            d.float(f"{yp}/E", y["E"])
+            d.int(f"{yp}/NN", y["NN"])
+            d.int(f"{yp}/NFP", y["NFP"])
+            # The format overloads this field; the reader keys it LE on the
+            # first energy and I on the rest.
+            d.int(f"{yp}/LE_or_I", y["LE"] if i == 0 else y["I"])
+            for j, p in enumerate(y["products"]):
+                pp = f"{yp}/products/{j}"
+                d.float(f"{pp}/ZAFP", p["ZAFP"])
+                d.float(f"{pp}/FPS", p["FPS"])
+                d.floats(f"{pp}/Y", list(p["Y"]))
+        return
+
+    if mt == 457:
+        for key in ("LIS", "LISO", "NST", "NSP"):
+            d.int(f"{path}/{key}", section[key])
+        d.float(f"{path}/SPI", section["SPI"])
+        d.float(f"{path}/PAR", section["PAR"])
+        if section["NST"] == 1:
+            return
+        d.floats(f"{path}/T1_2", list(section["T1/2"]))
+        d.int(f"{path}/NC", section["NC"])
+        _pairs(d, f"{path}/Ex", section["Ex"])
+        d.int(f"{path}/NDK", section["NDK"])
+        for i, m in enumerate(section["modes"]):
+            mp = f"{path}/modes/{i}"
+            d.float(f"{mp}/RTYP", m["RTYP"])
+            d.float(f"{mp}/RFS", m["RFS"])
+            d.floats(f"{mp}/Q", list(m["Q"]))
+            d.floats(f"{mp}/BR", list(m["BR"]))
+        for i, s in enumerate(section["spectra"]):
+            sp = f"{path}/spectra/{i}"
+            d.float(f"{sp}/STYP", s["STYP"])
+            for key in ("LCON", "LCOV", "NER"):
+                d.int(f"{sp}/{key}", s[key])
+            for key in ("FD", "ER_AV", "FC"):
+                d.floats(f"{sp}/{key}", list(s[key]))
+            for j, r in enumerate(s.get("discrete", [])):
+                rp = f"{sp}/discrete/{j}"
+                d.floats(f"{rp}/ER", list(r["ER"]))
+                d.float(f"{rp}/RTYP", r["RTYP"])
+                d.float(f"{rp}/TYPE", r["TYPE"])
+                for key in ("RI", "RIS", "RICC", "RICK", "RICL"):
+                    if key in r:
+                        d.floats(f"{rp}/{key}", list(r[key]))
+            if "continuous" in s:
+                d.float(f"{sp}/continuous/RTYP", s["continuous"]["RTYP"])
+                d.tab1(f"{sp}/continuous/RP", s["continuous"]["RP"])
+            if "continuous_covariance" in s:
+                c = s["continuous_covariance"]
+                d.int(f"{sp}/cont_cov/LB", c["LB"])
+                d.floats(f"{sp}/cont_cov/Ek", c["Ek"])
+                d.floats(f"{sp}/cont_cov/Fk", c["Fk"])
+            if "discrete_covariance" in s:
+                c = s["discrete_covariance"]
+                for key in ("LS", "LB", "NE", "NERP"):
+                    d.int(f"{sp}/disc_cov/{key}", c[key])
+                d.floats(f"{sp}/disc_cov/Ek", c["Ek"])
+                d.floats(f"{sp}/disc_cov/Fkk", c["Fkk"])
+        return
+
+    for key in ("LIS", "LISO", "NS", "NO"):
+        d.int(f"{path}/{key}", section[key])
+    for i, s in enumerate(section["subsections"]):
+        sp = f"{path}/subsections/{i}"
+        d.float(f"{sp}/ZAP", s["ZAP"])
+        d.float(f"{sp}/ELFS", s["ELFS"])
+        d.int(f"{sp}/LMF", s["LMF"])
+        d.int(f"{sp}/LFS", s["LFS"])
+        if "ND" in s:
+            d.int(f"{sp}/ND", s["ND"])
+            for key in ("HL", "RTYP", "ZAN", "BR", "END", "CT"):
+                d.floats(f"{sp}/{key}", s[key])
+
+
+def dump_mf9_mf10(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/LIS", section["LIS"])
+    d.int(f"{path}/NS", section["NS"])
+    for i, level in enumerate(section["levels"]):
+        lp = f"{path}/levels/{i}"
+        d.float(f"{lp}/QM", level["QM"])
+        d.float(f"{lp}/QI", level["QI"])
+        d.int(f"{lp}/IZAP", level["IZAP"])
+        d.int(f"{lp}/LFS", level["LFS"])
+        d.tab1(f"{lp}/func", level["Y"] if "Y" in level else level["sigma"])
+
+
 DUMPERS = {
     1: dump_mf1,
     2: dump_mf2,
@@ -419,6 +567,10 @@ DUMPERS = {
     4: dump_mf4,
     5: dump_mf5,
     6: dump_mf6,
+    7: dump_mf7,
+    8: dump_mf8,
+    9: dump_mf9_mf10,
+    10: dump_mf9_mf10,
 }
 
 
