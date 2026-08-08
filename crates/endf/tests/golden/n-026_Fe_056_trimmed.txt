@@ -13424,3 +13424,10 @@ V 0/reaction/102/products/0/yield/f/evalx F 5e-06 1e-05 2500.000005 13500.0 1900
 V 0/reaction/102/products/0/yield/f/evaly F 2.266822 2.266822 2.271232 2.3381615 2.3487985 2.3520985000000003 2.329161 2.486104 2.654351 2.6045015 2.6885570000000003 2.7813055 2.8740595 3.0455945 3.0936285 3.1662205 3.253697 3.3445785 3.364654 3.363584 3.412632 3.5001555 3.495882 3.4606955 3.442644 3.427041 3.4342965 3.392244 3.40474 3.40474
 V 0/reaction/102/products/0/n_distribution I 0
 V 0/reaction/102/n_derived_products I 0
+V 0/nuclide/name T 46653536
+V 0/nuclide/atomic_number I 26
+V 0/nuclide/mass_number I 56
+V 0/nuclide/metastable I 0
+V 0/nuclide/atomic_symbol T 4665
+V 0/nuclide/mts I 102
+V 0/nuclide/components/102 I 102

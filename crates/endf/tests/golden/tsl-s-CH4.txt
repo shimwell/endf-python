@@ -796,3 +796,9 @@ V 0/7/4/Teff/0/evalx F 22.0
 V 0/7/4/Teff/0/evaly F 910.0761
 V 0/production/mts I 
 V 0/reaction/mts I 
+V 0/nuclide/name T 6e313334
+V 0/nuclide/atomic_number I 0
+V 0/nuclide/mass_number I 134
+V 0/nuclide/metastable I 0
+V 0/nuclide/atomic_symbol T 6e
+V 0/nuclide/mts I 

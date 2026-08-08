@@ -37,7 +37,7 @@ Nothing in the Rust test needs changing — it discovers golden files and follow
 |---|---|
 | `MATERIALS`, `MAT` | Multi-material files, material numbers |
 | `SECTION mf mt n` | Section splitting, for **every** MF including unported ones |
-| `production/…`, `reaction/…` | The derived views: the MF=8/9/10 join, and every reaction gathered from its files |
+| `production/…`, `reaction/…`, `nuclide/…` | The derived views: the MF=8/9/10 join, every reaction gathered from its files, and the nuclide those reactions belong to |
 | `MF3 …`, `BP`, `INT`, `X`, `Y` | Parsed values, compared **exactly** |
 | `EVALX` / `EVALY` | Interpolation, compared to 1e-12 relative |
 
@@ -122,6 +122,9 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 - **MF5 LF=12 (Madland-Nix)**. LF=1, LF=5, LF=7 and LF=9 are covered by Li6,
   Am244 and U235; Madland-Nix has no fixture. The ACE side is complete apart
   from law 5, which the Python reader cannot read at all — see issue #19.
+- **A second ACE table of the same nuclide at another temperature**, which is
+  what `add_temperature_from_ace` exists for. Only the "already present" path
+  is exercised.
 - **A fissile ACE table.** Li6 has no NU block, so the ACE fission path —
   prompt and total nu, the delayed groups and their probabilities — is
   unexercised. So is the URR block on a real table, and MFTYPE=13 photon

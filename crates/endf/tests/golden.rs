@@ -803,6 +803,117 @@ fn dump_angle_energy(d: &mut Dump, p: &str, ae: &AngleEnergy) {
     }
 }
 
+/// Mirrors `dump_incident_neutron_ace` in `tools/dump_golden.py`.
+fn dump_incident_neutron_ace(d: &mut Dump, path: &str, t: &ace::Table) {
+    // ESZ (JXS(1)) is the energy grid and MTR (JXS(3)) the reaction list;
+    // without them there is no nuclide to build.
+    if t.data_type().ok() != Some(ace::TableType::NeutronContinuous) {
+        return;
+    }
+    if t.jxs[1] <= 0 || t.jxs[3] <= 0 {
+        return;
+    }
+    let n = endf::IncidentNeutron::from_ace(t, endf::ace::MetastableScheme::Mcnp).unwrap();
+
+    d.text(format!("{path}/name"), &n.name());
+    d.int(format!("{path}/atomic_number"), n.atomic_number as i64);
+    d.int(format!("{path}/mass_number"), n.mass_number as i64);
+    d.int(format!("{path}/metastable"), n.metastable as i64);
+    d.float(
+        format!("{path}/atomic_weight_ratio"),
+        n.atomic_weight_ratio.unwrap(),
+    );
+    d.floats(format!("{path}/kTs"), n.k_ts.clone());
+    for (i, temperature) in n.temperatures().iter().enumerate() {
+        d.text(format!("{path}/temperatures/{i}"), temperature);
+        d.floats(
+            format!("{path}/energy/{temperature}"),
+            n.energy[temperature].clone(),
+        );
+        if let Some(urr) = n.urr.get(temperature) {
+            d.floats(
+                format!("{path}/urr/{temperature}/energy"),
+                urr.energy.clone(),
+            );
+        }
+    }
+
+    let mts: Vec<i32> = n.reactions.keys().copied().collect();
+    d.ints(
+        format!("{path}/mts"),
+        mts.iter().map(|&m| m as i64).collect(),
+    );
+    d.ints(
+        format!("{path}/redundant"),
+        mts.iter()
+            .map(|m| i64::from(n.reactions[m].redundant))
+            .collect(),
+    );
+    for mt in &mts {
+        d.ints(
+            format!("{path}/components/{mt}"),
+            n.reaction_components(*mt)
+                .iter()
+                .map(|&m| m as i64)
+                .collect(),
+        );
+    }
+
+    // The removal cross section is deliberately not dumped here. It folds the
+    // elastic angular distribution into the total, and for ACE data the Python
+    // `forward_fraction` returns uninitialized memory — see issue #21 — so
+    // there is nothing stable to compare against. It is dumped on the ENDF
+    // path, where the answer is well defined.
+
+    // Only the reactions this type synthesises are dumped in full; the ones
+    // `Reaction::from_ace` builds are compared elsewhere.
+    let mut from_ace_mts: BTreeSet<i32> = BTreeSet::from([2]);
+    from_ace_mts.extend((1..=t.nxs[4]).map(|i| t.xss[(t.jxs[3] + i - 1) as usize] as i32));
+    for mt in mts.iter().filter(|m| !from_ace_mts.contains(m)) {
+        dump_reaction(d, &format!("{path}/synthesised/{mt}"), &n.reactions[mt]);
+    }
+}
+
+/// Mirrors `dump_incident_neutron_endf` in `tools/dump_golden.py`.
+fn dump_incident_neutron_endf(d: &mut Dump, path: &str, material: &Material) {
+    if material.mf1_mt451().is_none() {
+        return;
+    }
+    let n = endf::IncidentNeutron::from_endf(material).unwrap();
+    d.text(format!("{path}/name"), &n.name());
+    d.int(format!("{path}/atomic_number"), n.atomic_number as i64);
+    d.int(format!("{path}/mass_number"), n.mass_number as i64);
+    d.int(format!("{path}/metastable"), n.metastable as i64);
+    d.text(format!("{path}/atomic_symbol"), n.atomic_symbol());
+    let mts: Vec<i32> = n.reactions.keys().copied().collect();
+    d.ints(
+        format!("{path}/mts"),
+        mts.iter().map(|&m| m as i64).collect(),
+    );
+    for mt in &mts {
+        d.ints(
+            format!("{path}/components/{mt}"),
+            n.reaction_components(*mt)
+                .iter()
+                .map(|&m| m as i64)
+                .collect(),
+        );
+    }
+
+    // The removal cross section, which folds the elastic angular distribution
+    // into the total. Several cutoffs, since each picks a different slice of
+    // the forward cone.
+    if n.contains(1) && n.contains(2) {
+        for cutoff in [-1.0, 0.0, 0.5] {
+            let name = format!("{cutoff:+.1}");
+            d.tab1(
+                &format!("{path}/removal_xs/{name}"),
+                &n.removal_xs("0K", cutoff).unwrap(),
+            );
+        }
+    }
+}
+
 /// Mirrors `dump_ace_reactions` in `tools/dump_golden.py`.
 fn dump_ace_reactions(d: &mut Dump, path: &str, t: &ace::Table) {
     // MTR (JXS(3)) lists the reactions; without it there are none to read.
@@ -923,6 +1034,7 @@ fn dump_ace_table(d: &mut Dump, path: &str, t: &ace::Table) {
     dump_ace_angle(d, &format!("{path}/and"), t);
     dump_ace_dlw(d, &format!("{path}/dlw"), t);
     dump_ace_reactions(d, &format!("{path}/reaction"), t);
+    dump_incident_neutron_ace(d, &format!("{path}/nuclide"), t);
 
     // The unresolved resonance block, when the table has one.
     if let Some(urr) = endf::urr::ProbabilityTables::from_ace(t) {
@@ -1865,6 +1977,7 @@ fn check(golden_path: &Path) -> usize {
         }
         dump_radionuclide_production(&mut d, &format!("{m}/production"), material);
         dump_reactions(&mut d, &format!("{m}/reaction"), material);
+        dump_incident_neutron_endf(&mut d, &format!("{m}/nuclide"), material);
     }
 
     assert_eq!(sections, g.sections, "{name}: section splitting differs");

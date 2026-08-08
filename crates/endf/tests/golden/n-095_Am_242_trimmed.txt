@@ -301,3 +301,9 @@ V 0/1/458/ER/poly F 205717800.0 14638760.0 -1.330935 0.3334525 2.33282e-09 1.131
 V 0/1/458/ET/poly F 213563500.0 15217600.0 -1.430935 0.3860086 2.33282e-09 1.131612e-09
 V 0/production/mts I 
 V 0/reaction/mts I 
+V 0/nuclide/name T 416d323432
+V 0/nuclide/atomic_number I 95
+V 0/nuclide/mass_number I 242
+V 0/nuclide/metastable I 0
+V 0/nuclide/atomic_symbol T 416d
+V 0/nuclide/mts I 

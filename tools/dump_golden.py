@@ -1072,6 +1072,62 @@ def dump_ace_reactions(d: Dump, path: str, table) -> None:
         dump_reaction(d, f"{path}/{i_reaction}", rx, rx.derived_products)
 
 
+def dump_incident_neutron_ace(d: Dump, path: str, table) -> None:
+    """The nuclide an ACE table describes, above the reactions themselves."""
+    from endf.ace import TableType
+    from endf.incident_neutron import IncidentNeutron
+
+    # ESZ (JXS(1)) is the energy grid and MTR (JXS(3)) the reaction list;
+    # without them there is no nuclide to build.
+    if table.data_type != TableType.NEUTRON_CONTINUOUS:
+        return
+    if table.jxs[1] <= 0 or table.jxs[3] <= 0:
+        return
+    n = IncidentNeutron.from_ace(table)
+
+    d.text(f"{path}/name", n.name)
+    d.int(f"{path}/atomic_number", n.atomic_number)
+    d.int(f"{path}/mass_number", n.mass_number)
+    d.int(f"{path}/metastable", n.metastable)
+    d.float(f"{path}/atomic_weight_ratio", n.atomic_weight_ratio)
+    d.floats(f"{path}/kTs", n.kTs)
+    for i, temperature in enumerate(n.temperatures):
+        d.text(f"{path}/temperatures/{i}", temperature)
+        d.floats(f"{path}/energy/{temperature}", n.energy[temperature])
+        if temperature in n.urr:
+            d.floats(f"{path}/urr/{temperature}/energy", n.urr[temperature].energy)
+
+    d.ints(f"{path}/mts", sorted(n.reactions))
+    d.ints(
+        f"{path}/redundant",
+        [int(n.reactions[mt].redundant) for mt in sorted(n.reactions)],
+    )
+    for mt in sorted(n.reactions):
+        d.ints(f"{path}/components/{mt}", n.get_reaction_components(mt))
+
+    # The removal cross section is deliberately not dumped here. It folds the
+    # elastic angular distribution into the total, and for ACE data the Python
+    # `forward_fraction` returns uninitialized memory — see issue #21 — so
+    # there is nothing stable to compare against. It is dumped on the ENDF
+    # path, where the answer is well defined.
+
+    # The reactions `Reaction.from_ace` builds are dumped in full elsewhere.
+    # What is new here are the ones this class synthesises: the total, the
+    # absorption and the heating from the main energy block, and the sums it
+    # builds where the table gives only the levels.
+    from_ace_mts = {2}
+    from_ace_mts.update(
+        int(table.xss[table.jxs[3] + i - 1]) for i in range(1, int(table.nxs[4]) + 1)
+    )
+    for mt in sorted(set(n.reactions) - from_ace_mts):
+        dump_reaction(
+            d,
+            f"{path}/synthesised/{mt}",
+            n.reactions[mt],
+            n.reactions[mt].derived_products,
+        )
+
+
 def dump_ace(d: Dump, path: str, table) -> None:
     d.text(f"{path}/name", table.name)
     d.float(f"{path}/atomic_weight_ratio", table.atomic_weight_ratio)
@@ -1092,6 +1148,7 @@ def dump_ace(d: Dump, path: str, table) -> None:
     dump_ace_angle(d, f"{path}/and", table)
     dump_ace_dlw(d, f"{path}/dlw", table)
     dump_ace_reactions(d, f"{path}/reaction", table)
+    dump_incident_neutron_ace(d, f"{path}/nuclide", table)
 
     # The unresolved resonance block, when the table has one.
     from endf.urr import ProbabilityTables
@@ -1162,6 +1219,36 @@ def dump(path: Path, out) -> None:
 
         dump_radionuclide_production(d, f"{m}/production", material)
         dump_reactions(d, f"{m}/reaction", material)
+        dump_incident_neutron_endf(d, f"{m}/nuclide", material)
+
+
+def dump_incident_neutron_endf(d: Dump, path: str, material) -> None:
+    """The nuclide an ENDF evaluation describes.
+
+    The reactions themselves are dumped by `dump_reactions`; what is checked
+    here is the identity the class derives and which reactions it collects.
+    """
+    from endf.incident_neutron import IncidentNeutron
+
+    if (1, 451) not in material:
+        return
+    n = IncidentNeutron.from_endf(material)
+    d.text(f"{path}/name", n.name)
+    d.int(f"{path}/atomic_number", n.atomic_number)
+    d.int(f"{path}/mass_number", n.mass_number)
+    d.int(f"{path}/metastable", n.metastable)
+    d.text(f"{path}/atomic_symbol", n.atomic_symbol)
+    d.ints(f"{path}/mts", sorted(n.reactions))
+    for mt in sorted(n.reactions):
+        d.ints(f"{path}/components/{mt}", n.get_reaction_components(mt))
+
+    # The removal cross section, which folds the elastic angular distribution
+    # into the total. Several cutoffs, since each picks a different slice of
+    # the forward cone.
+    if 1 in n.reactions and 2 in n.reactions:
+        for cutoff in (-1.0, 0.0, 0.5):
+            name = f"{cutoff:+.1f}"
+            d.tab1(f"{path}/removal_xs/{name}", n.removal_xs("0K", cutoff))
 
 
 def dump_reactions(d: Dump, path: str, material) -> None:

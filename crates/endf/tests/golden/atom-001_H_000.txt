@@ -113,3 +113,9 @@ V 0/28/533/shells/0/ETR F
 V 0/28/533/shells/0/FTR F 
 V 0/production/mts I 
 V 0/reaction/mts I 
+V 0/nuclide/name T 4830
+V 0/nuclide/atomic_number I 1
+V 0/nuclide/mass_number I 0
+V 0/nuclide/metastable I 0
+V 0/nuclide/atomic_symbol T 48
+V 0/nuclide/mts I 

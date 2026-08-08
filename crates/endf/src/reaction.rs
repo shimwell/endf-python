@@ -663,8 +663,9 @@ impl Reaction {
                     *v = 0.0;
                 }
             }
-            rx.xs
-                .insert(temperature.clone(), Tabulated1D::new(energy, sigma));
+            let mut tabulated = Tabulated1D::new(energy, sigma);
+            tabulated.threshold_idx = Some(threshold_idx);
+            rx.xs.insert(temperature.clone(), tabulated);
 
             // TY is the multiplicity, and its sign records the frame.
             let ty = at(table.jxs[5] + i_reaction - 1) as i64;
@@ -730,8 +731,9 @@ impl Reaction {
                     *v = 0.0;
                 }
             }
-            rx.xs
-                .insert(temperature.clone(), Tabulated1D::new(grid.clone(), elastic));
+            let mut tabulated = Tabulated1D::new(grid.clone(), elastic);
+            tabulated.threshold_idx = Some(0);
+            rx.xs.insert(temperature.clone(), tabulated);
 
             // No energy distribution is given: it follows from the kinematics.
             rx.products.push(Product {
@@ -929,7 +931,7 @@ fn fission_products_ace(table: &Table) -> Result<(Vec<Product>, Vec<Product>)> {
 }
 
 /// The photons a reaction produces, from the ACE photon production blocks.
-fn photon_products_ace(table: &Table, rx: &Reaction) -> Result<Vec<Product>> {
+pub(crate) fn photon_products_ace(table: &Table, rx: &Reaction) -> Result<Vec<Product>> {
     let xss = &table.xss;
     let at = |i: i64| -> f64 {
         usize::try_from(i)

@@ -25,6 +25,7 @@ pub mod data;
 pub mod error;
 pub mod fission_energy;
 pub mod function;
+pub mod incident_neutron;
 pub mod material;
 pub mod mf;
 pub mod product;
@@ -41,6 +42,7 @@ pub use data::{gnds_name, zam, EV_PER_MEV, K_BOLTZMANN};
 pub use error::{Error, Result};
 pub use fission_energy::FissionEnergyRelease;
 pub use function::{Polynomial, Tabulated1D, Tabulated2D};
+pub use incident_neutron::IncidentNeutron;
 pub use material::{get_materials, materials_from_str, Material, Section};
 pub use product::{EmissionMode, Product, Yield};
 pub use radionuclide_production::{

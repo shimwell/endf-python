@@ -1489,3 +1489,9 @@ V 0/26/534/products/0/distribution/distribution/7/b/145 F 3.10545e-21
 V 0/26/534/products/0/distribution/distribution/7/b/146 F 2.7755e-21
 V 0/production/mts I 
 V 0/reaction/mts I 
+V 0/nuclide/name T 4830
+V 0/nuclide/atomic_number I 1
+V 0/nuclide/mass_number I 0
+V 0/nuclide/metastable I 0
+V 0/nuclide/atomic_symbol T 48
+V 0/nuclide/mts I 

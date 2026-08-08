@@ -16,6 +16,12 @@ pub struct Tabulated1D {
     /// ENDF interpolation scheme per region: 1 histogram, 2 linear-linear,
     /// 3 linear-log, 4 log-linear, 5 log-log.
     pub interpolation: Vec<i32>,
+    /// Where this function starts on the nuclide's own energy grid.
+    ///
+    /// A processed cross section begins at its threshold rather than at the
+    /// bottom of the grid, and summing several of them needs to know where
+    /// each one began. `None` for anything not read from an ACE table.
+    pub threshold_idx: Option<usize>,
 }
 
 impl Tabulated1D {
@@ -27,6 +33,7 @@ impl Tabulated1D {
             y,
             breakpoints: vec![n],
             interpolation: vec![2],
+            threshold_idx: None,
         }
     }
 
@@ -44,6 +51,7 @@ impl Tabulated1D {
             y,
             breakpoints,
             interpolation,
+            threshold_idx: None,
         }
     }
 
@@ -198,6 +206,7 @@ impl Tabulated1D {
             y,
             breakpoints,
             interpolation,
+            threshold_idx: None,
         }
     }
 

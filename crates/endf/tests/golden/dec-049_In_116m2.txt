@@ -224,3 +224,9 @@ V 0/8/457/spectra/2/discrete/13/TYPE F 0.0
 V 0/8/457/spectra/2/discrete/13/RI F 2.434405e-05 2.494121e-06
 V 0/production/mts I 
 V 0/reaction/mts I 
+V 0/nuclide/name T 496e3131365f6d32
+V 0/nuclide/atomic_number I 49
+V 0/nuclide/mass_number I 116
+V 0/nuclide/metastable I 2
+V 0/nuclide/atomic_symbol T 496e
+V 0/nuclide/mts I 

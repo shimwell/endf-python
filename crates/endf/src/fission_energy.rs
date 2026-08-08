@@ -200,6 +200,7 @@ fn sher_beck_prompt_neutrons(zeroth: f64, nu: Option<&Nu>) -> Result<Component> 
                 y,
                 breakpoints: t.breakpoints.clone(),
                 interpolation: t.interpolation.clone(),
+                threshold_idx: None,
             })
         }
         Nu::Polynomial(coef) => {

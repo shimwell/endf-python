@@ -278,11 +278,14 @@ impl AngleDistribution {
 
     /// Fraction of scattering into the cone `mu >= mu_cutoff`, at each energy.
     ///
-    /// Used for the removal cross sections of point-kernel shielding, which is
-    /// an ENDF-side calculation: every distribution there is Legendre or a
-    /// tabulation. The ACE shapes are given zero. The Python reader leaves
-    /// them at whatever `np.empty` returned, which is not something to
-    /// reproduce.
+    /// Used for the removal cross sections of point-kernel shielding, where a
+    /// forward-scattered neutron counts as still in the uncollided beam.
+    ///
+    /// Every shape is handled, including the two an ACE table produces. The
+    /// Python reader fills only the Legendre and tabulated entries and returns
+    /// whatever `np.empty` gave it for the rest, so its answer for ACE data is
+    /// not merely different but changes between calls; see issue #21. There is
+    /// no behaviour to match, so this computes them.
     pub fn forward_fraction(&self, mu_cutoff: f64) -> Vec<f64> {
         let mut fractions = vec![0.0; self.energy.len()];
         for (i, mu_i) in self.mu.iter().enumerate() {
@@ -308,7 +311,27 @@ impl AngleDistribution {
                     let total = *cdf.last().unwrap_or(&0.0);
                     (total - cdf_func.eval(mu_cutoff)) / total
                 }
-                _ => 0.0,
+                AngleAtEnergy::Tabular(t) => {
+                    // The same, through the density's own cumulative
+                    // distribution rather than through an integral of a TAB1.
+                    let cdf = t.cdf();
+                    let cdf_func = Tabulated1D::new(t.x.clone(), cdf.clone());
+                    let total = *cdf.last().unwrap_or(&0.0);
+                    if total > 0.0 {
+                        (total - cdf_func.eval(mu_cutoff)) / total
+                    } else {
+                        0.0
+                    }
+                }
+                AngleAtEnergy::Isotropic(u) => {
+                    // The part of [a, b] that lies at or above the cutoff.
+                    let width = u.b - u.a;
+                    if width > 0.0 {
+                        ((u.b - mu_cutoff.max(u.a)) / width).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    }
+                }
             };
         }
         fractions
