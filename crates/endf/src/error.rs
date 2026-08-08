@@ -19,6 +19,14 @@ pub enum Error {
     BadNdigit {
         ndigit: i64,
     },
+    /// A name that is not a nuclide in GNDS convention.
+    BadNuclideName {
+        name: String,
+    },
+    /// A chemical symbol with no atomic number.
+    UnknownElement {
+        symbol: String,
+    },
     /// A representation the reader does not implement, matching where the
     /// Python reader raises `NotImplementedError`.
     Unsupported {
@@ -41,6 +49,12 @@ impl fmt::Display for Error {
             }
             Error::BadNdigit { ndigit } => {
                 write!(f, "INTG record has NDIGIT={ndigit}, expected 2 through 6")
+            }
+            Error::BadNuclideName { name } => {
+                write!(f, "{name:?} is not a nuclide name in GNDS format")
+            }
+            Error::UnknownElement { symbol } => {
+                write!(f, "{symbol:?} is not a recognised element symbol")
             }
             Error::Unsupported { what } => {
                 write!(f, "this reader does not implement {what}")

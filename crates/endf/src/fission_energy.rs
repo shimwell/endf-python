@@ -6,13 +6,11 @@
 //! term with a polynomial delayed one. That distinction is preserved here
 //! rather than collapsed, because it is what the converted data has to carry.
 
+use crate::data::EV_PER_MEV;
 use crate::error::{Error, Result};
 use crate::function::{Polynomial, Tabulated1D};
 use crate::material::Material;
 use crate::mf::mf1::{FissionEnergyRelease as Mt458Component, Nu};
-
-/// eV per MeV.
-pub const EV_PER_MEV: f64 = 1.0e6;
 
 /// The components of the fission energy release, in the order MT=458 stores
 /// them. `recoverable` and `total` are recomputed from the others rather than
