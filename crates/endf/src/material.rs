@@ -28,6 +28,12 @@ pub enum Section {
     Mf2(Box<mf::mf2::Mf2>),
     /// MF=3, reaction cross sections.
     Mf3(mf::mf3::Mf3),
+    /// MF=4, angular distributions.
+    Mf4(Box<mf::mf4::Mf4>),
+    /// MF=5, energy distributions.
+    Mf5(Box<mf::mf5::Mf5>),
+    /// MF=6, energy-angle distributions of reaction products.
+    Mf6(Box<mf::mf6::Mf6>),
     Unparsed {
         mf: i32,
         mt: i32,
@@ -173,6 +179,30 @@ impl Material {
         }
     }
 
+    /// The MF=4 angular distribution for a reaction.
+    pub fn mf4(&self, mt: i32) -> Option<&mf::mf4::Mf4> {
+        match self.section_data.get(&(4, mt))? {
+            Section::Mf4(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=5 energy distributions for a reaction.
+    pub fn mf5(&self, mt: i32) -> Option<&mf::mf5::Mf5> {
+        match self.section_data.get(&(5, mt))? {
+            Section::Mf5(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=6 product distributions for a reaction.
+    pub fn mf6(&self, mt: i32) -> Option<&mf::mf6::Mf6> {
+        match self.section_data.get(&(6, mt))? {
+            Section::Mf6(s) => Some(s),
+            _ => None,
+        }
+    }
+
     /// The MF=2 MT=151 resonance parameters.
     pub fn mf2(&self) -> Option<&mf::mf2::Mf2> {
         match self.section_data.get(&(2, 151))? {
@@ -242,6 +272,9 @@ fn parse_section(mf: i32, mt: i32, text: &str) -> Result<Section> {
         (1, 460) => Section::Mf1Mt460(mf::mf1::parse_mf1_mt460(&mut r)?),
         (2, 151) => Section::Mf2(Box::new(mf::mf2::parse_mf2(&mut r)?)),
         (3, _) => Section::Mf3(mf::mf3::parse_mf3(&mut r)?),
+        (4, _) => Section::Mf4(Box::new(mf::mf4::parse_mf4(&mut r)?)),
+        (5, _) => Section::Mf5(Box::new(mf::mf5::parse_mf5(&mut r)?)),
+        (6, _) => Section::Mf6(Box::new(mf::mf6::parse_mf6(&mut r)?)),
         _ => Section::Unparsed { mf, mt },
     })
 }

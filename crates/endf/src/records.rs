@@ -230,6 +230,17 @@ impl<'a> Reader<'a> {
         Ok(line)
     }
 
+    /// Skip `n` lines without interpreting them.
+    ///
+    /// Used for records the format defines but nothing reads, such as MF=4's
+    /// obsolete energy transformation matrix.
+    pub fn skip_lines(&mut self, n: usize) -> Result<()> {
+        for _ in 0..n {
+            self.next_line("lines to skip")?;
+        }
+        Ok(())
+    }
+
     /// A TEXT record: the 66 columns before the control fields.
     pub fn text_record(&mut self) -> Result<&'a str> {
         let line = self.next_line("a TEXT record")?;

@@ -316,7 +316,110 @@ def dump_mf3(d: Dump, path: str, mt: int, section: dict) -> None:
     d.tab1(f"{path}/sigma", section["sigma"])
 
 
-DUMPERS = {1: dump_mf1, 2: dump_mf2, 3: dump_mf3}
+def dump_mf4(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    for key in ("LTT", "LI", "LCT"):
+        d.int(f"{path}/{key}", section[key])
+    for kind in ("legendre", "tabulated"):
+        if kind not in section:
+            continue
+        sub = section[kind]
+        sp = f"{path}/{kind}"
+        d.tab2(f"{sp}/E_int", sub["E_int"])
+        d.float(f"{sp}/T", sub["T"])
+        d.int(f"{sp}/LT", sub["LT"])
+        d.floats(f"{sp}/E", sub["E"])
+        for i, a in enumerate(sub.get("a_l", [])):
+            d.floats(f"{sp}/a_l/{i}", a)
+        for i, mu in enumerate(sub.get("mu", [])):
+            d.tab1(f"{sp}/mu/{i}", mu)
+
+
+def dump_mf5(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/NK", section["NK"])
+    for i, sub in enumerate(section["subsections"]):
+        sp = f"{path}/subsections/{i}"
+        d.int(f"{sp}/LF", sub["LF"])
+        d.tab1(f"{sp}/p", sub["p"])
+        dist = sub["distribution"]
+        dp = f"{sp}/distribution"
+        for key in ("U", "EFL", "EFH"):
+            if key in dist:
+                d.float(f"{dp}/{key}", dist[key])
+        if "E_int" in dist:
+            d.tab2(f"{dp}/E_int", dist["E_int"])
+        if "E" in dist:
+            d.floats(f"{dp}/E", dist["E"])
+        # LF=1 stores a list under 'g'; LF=5 stores a single table there.
+        if isinstance(dist.get("g"), list):
+            for j, g in enumerate(dist["g"]):
+                d.tab1(f"{dp}/g/{j}", g)
+        elif "g" in dist:
+            d.tab1(f"{dp}/g", dist["g"])
+        for key in ("theta", "a", "b", "T_M"):
+            if key in dist:
+                d.tab1(f"{dp}/{key}", dist[key])
+
+
+def dump_mf6(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    for key in ("JP", "LCT", "NK"):
+        d.int(f"{path}/{key}", section[key])
+    for i, p in enumerate(section["products"]):
+        pp = f"{path}/products/{i}"
+        d.int(f"{pp}/ZAP", p["ZAP"])
+        d.float(f"{pp}/AWP", p["AWP"])
+        d.int(f"{pp}/LIP", p["LIP"])
+        d.int(f"{pp}/LAW", p["LAW"])
+        d.tab1(f"{pp}/y_i", p["y_i"])
+        if "distribution" not in p:
+            continue
+        dist = p["distribution"]
+        dp = f"{pp}/distribution"
+        for key in ("LANG", "LEP", "NR", "NE", "LIDP", "NPSX"):
+            if key in dist:
+                d.int(f"{dp}/{key}", dist[key])
+        for key in ("SPI", "APSX"):
+            if key in dist:
+                d.float(f"{dp}/{key}", dist[key])
+        if "E_int" in dist:
+            d.tab2(f"{dp}/E_int", dist["E_int"])
+        if "E" in dist:
+            d.floats(f"{dp}/E", dist["E"])
+        for j, s in enumerate(dist.get("distribution", [])):
+            sp = f"{dp}/distribution/{j}"
+            for key in ("ND", "NA", "NW", "NEP", "LANG", "NL", "LTP", "NRM", "NMU"):
+                if key in s:
+                    d.int(f"{sp}/{key}", s[key])
+            if "E" in s:
+                d.float(f"{sp}/E", s["E"])
+            if "E'" in s:
+                d.floats(f"{sp}/Eout", s["E'"])
+            for key in ("A_l", "A"):
+                if key in s:
+                    d.floats(f"{sp}/{key}", s[key])
+            if "b" in s:
+                for r, row in enumerate(s["b"]):
+                    d.floats(f"{sp}/b/{r}", row)
+            if "mu_int" in s:
+                d.tab2(f"{sp}/mu_int", s["mu_int"])
+            for k, entry in enumerate(s.get("mu", [])):
+                d.float(f"{sp}/mu/{k}/mu", entry["mu"])
+                d.tab1(f"{sp}/mu/{k}/f", entry["f"])
+
+
+DUMPERS = {
+    1: dump_mf1,
+    2: dump_mf2,
+    3: dump_mf3,
+    4: dump_mf4,
+    5: dump_mf5,
+    6: dump_mf6,
+}
 
 
 def dump(path: Path, out) -> None:

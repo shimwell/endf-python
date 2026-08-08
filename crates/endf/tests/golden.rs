@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 
 use endf::mf::mf1::{FissionEnergyRelease, Nu, FISSION_ENERGY_COMPONENTS};
 use endf::mf::mf2::{ResonanceParameters, UnresolvedParameters};
+use endf::mf::mf5::EnergyDistribution;
+use endf::mf::mf6::Distribution as Mf6Distribution;
 use endf::{materials_from_str, Material, Section, Tabulated1D, Tabulated2D};
 
 /// Mirrors `MAX_SAMPLES` in `tools/dump_golden.py`.
@@ -351,6 +353,77 @@ fn dump_mf2_parameters(d: &mut Dump, rp: &str, p: &ResonanceParameters) {
     }
 }
 
+fn dump_mf6_distribution(d: &mut Dump, dp: &str, dist: &Mf6Distribution) {
+    match dist {
+        Mf6Distribution::None => {}
+        Mf6Distribution::ContinuumEnergyAngle(c) => {
+            d.int(format!("{dp}/LANG"), c.lang);
+            d.int(format!("{dp}/LEP"), c.lep);
+            d.int(format!("{dp}/NR"), c.nr);
+            d.int(format!("{dp}/NE"), c.ne);
+            d.tab2(&format!("{dp}/E_int"), &c.e_int);
+            d.floats(format!("{dp}/E"), c.energy.clone());
+            for (j, s) in c.distribution.iter().enumerate() {
+                let sp = format!("{dp}/distribution/{j}");
+                d.int(format!("{sp}/ND"), s.nd);
+                d.int(format!("{sp}/NA"), s.na);
+                d.int(format!("{sp}/NW"), s.nw);
+                d.int(format!("{sp}/NEP"), s.nep);
+                d.floats(format!("{sp}/Eout"), s.e_out.clone());
+                for (r, row) in s.b.iter().enumerate() {
+                    d.floats(format!("{sp}/b/{r}"), row.clone());
+                }
+            }
+        }
+        Mf6Distribution::DiscreteTwoBody(t) => {
+            d.int(format!("{dp}/NR"), t.nr);
+            d.int(format!("{dp}/NE"), t.ne);
+            d.tab2(&format!("{dp}/E_int"), &t.e_int);
+            d.floats(format!("{dp}/E"), t.energy.clone());
+            for (j, s) in t.distribution.iter().enumerate() {
+                let sp = format!("{dp}/distribution/{j}");
+                d.int(format!("{sp}/LANG"), s.lang);
+                d.int(format!("{sp}/NW"), s.nw);
+                d.int(format!("{sp}/NL"), s.nl);
+                d.floats(format!("{sp}/A_l"), s.a_l.clone());
+            }
+        }
+        Mf6Distribution::ChargedParticleElastic(c) => {
+            d.float(format!("{dp}/SPI"), c.spi);
+            d.int(format!("{dp}/LIDP"), c.lidp);
+            d.int(format!("{dp}/NE"), c.ne);
+            d.tab2(&format!("{dp}/E_int"), &c.e_int);
+            for (j, s) in c.distribution.iter().enumerate() {
+                let sp = format!("{dp}/distribution/{j}");
+                d.float(format!("{sp}/E"), s.energy);
+                d.int(format!("{sp}/LTP"), s.ltp);
+                d.int(format!("{sp}/NW"), s.nw);
+                d.int(format!("{sp}/NL"), s.nl);
+                d.floats(format!("{sp}/A"), s.a.clone());
+            }
+        }
+        Mf6Distribution::NBodyPhaseSpace { apsx, npsx } => {
+            d.float(format!("{dp}/APSX"), *apsx);
+            d.int(format!("{dp}/NPSX"), *npsx);
+        }
+        Mf6Distribution::LaboratoryAngleEnergy(l) => {
+            d.int(format!("{dp}/NE"), l.ne);
+            d.tab2(&format!("{dp}/E_int"), &l.e_int);
+            for (j, s) in l.distribution.iter().enumerate() {
+                let sp = format!("{dp}/distribution/{j}");
+                d.float(format!("{sp}/E"), s.energy);
+                d.int(format!("{sp}/NRM"), s.nrm);
+                d.int(format!("{sp}/NMU"), s.nmu);
+                d.tab2(&format!("{sp}/mu_int"), &s.mu_int);
+                for (k, entry) in s.mu.iter().enumerate() {
+                    d.float(format!("{sp}/mu/{k}/mu"), entry.mu);
+                    d.tab1(&format!("{sp}/mu/{k}/f"), &entry.f);
+                }
+            }
+        }
+    }
+}
+
 fn dump_section(d: &mut Dump, path: &str, section: &Section) {
     match section {
         Section::Mf1Mt451(s) => {
@@ -501,6 +574,92 @@ fn dump_section(d: &mut Dump, path: &str, section: &Section) {
             d.float(format!("{path}/QI"), s.qi);
             d.int(format!("{path}/LR"), s.lr);
             d.tab1(&format!("{path}/sigma"), &s.sigma);
+        }
+
+        Section::Mf4(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/LTT"), s.ltt);
+            d.int(format!("{path}/LI"), s.li);
+            d.int(format!("{path}/LCT"), s.lct);
+            if let Some(l) = &s.legendre {
+                let sp = format!("{path}/legendre");
+                d.tab2(&format!("{sp}/E_int"), &l.e_int);
+                d.float(format!("{sp}/T"), l.t);
+                d.int(format!("{sp}/LT"), l.lt);
+                d.floats(format!("{sp}/E"), l.energy.clone());
+                for (i, a) in l.a_l.iter().enumerate() {
+                    d.floats(format!("{sp}/a_l/{i}"), a.clone());
+                }
+            }
+            if let Some(t) = &s.tabulated {
+                let sp = format!("{path}/tabulated");
+                d.tab2(&format!("{sp}/E_int"), &t.e_int);
+                d.float(format!("{sp}/T"), t.t);
+                d.int(format!("{sp}/LT"), t.lt);
+                d.floats(format!("{sp}/E"), t.energy.clone());
+                for (i, mu) in t.mu.iter().enumerate() {
+                    d.tab1(&format!("{sp}/mu/{i}"), mu);
+                }
+            }
+        }
+
+        Section::Mf5(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/NK"), s.nk);
+            for (i, sub) in s.subsections.iter().enumerate() {
+                let sp = format!("{path}/subsections/{i}");
+                d.int(format!("{sp}/LF"), sub.lf);
+                d.tab1(&format!("{sp}/p"), &sub.p);
+                let dp = format!("{sp}/distribution");
+                match &sub.distribution {
+                    EnergyDistribution::ArbitraryTabulated { e_int, energy, g } => {
+                        d.tab2(&format!("{dp}/E_int"), e_int);
+                        d.floats(format!("{dp}/E"), energy.clone());
+                        for (j, t) in g.iter().enumerate() {
+                            d.tab1(&format!("{dp}/g/{j}"), t);
+                        }
+                    }
+                    EnergyDistribution::GeneralEvaporation { u, theta, g } => {
+                        d.float(format!("{dp}/U"), *u);
+                        d.tab1(&format!("{dp}/theta"), theta);
+                        d.tab1(&format!("{dp}/g"), g);
+                    }
+                    EnergyDistribution::MaxwellEnergy { u, theta }
+                    | EnergyDistribution::Evaporation { u, theta } => {
+                        d.float(format!("{dp}/U"), *u);
+                        d.tab1(&format!("{dp}/theta"), theta);
+                    }
+                    EnergyDistribution::WattEnergy { u, a, b } => {
+                        d.float(format!("{dp}/U"), *u);
+                        d.tab1(&format!("{dp}/a"), a);
+                        d.tab1(&format!("{dp}/b"), b);
+                    }
+                    EnergyDistribution::MadlandNix { efl, efh, t_m } => {
+                        d.float(format!("{dp}/EFL"), *efl);
+                        d.float(format!("{dp}/EFH"), *efh);
+                        d.tab1(&format!("{dp}/T_M"), t_m);
+                    }
+                }
+            }
+        }
+
+        Section::Mf6(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/JP"), s.jp);
+            d.int(format!("{path}/LCT"), s.lct);
+            d.int(format!("{path}/NK"), s.nk);
+            for (i, p) in s.products.iter().enumerate() {
+                let pp = format!("{path}/products/{i}");
+                d.int(format!("{pp}/ZAP"), p.zap);
+                d.float(format!("{pp}/AWP"), p.awp);
+                d.int(format!("{pp}/LIP"), p.lip);
+                d.int(format!("{pp}/LAW"), p.law);
+                d.tab1(&format!("{pp}/y_i"), &p.yield_);
+                dump_mf6_distribution(d, &format!("{pp}/distribution"), &p.distribution);
+            }
         }
 
         Section::Unparsed { .. } => {}
@@ -703,7 +862,10 @@ fn matches_the_python_reader() {
 fn unported_files_keep_their_text() {
     // The port proceeds file by file, so a section with no Rust parser must
     // still round-trip its text for the Python reader to fall back to.
-    let path = repo_root().join("tests").join("n-095_Am_244.endf");
+    //
+    // The photo-atomic fixture is used because every file in the neutron ones
+    // is now ported; MF=23 and MF=27 are still outstanding here.
+    let path = repo_root().join("tests").join("photoat-001_H_000.endf");
     let text = std::fs::read_to_string(&path).unwrap();
     let m = Material::from_str(&text).unwrap();
 
