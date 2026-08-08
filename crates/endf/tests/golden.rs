@@ -24,6 +24,7 @@ use endf::mf::atomic::ElectroAtomicDistribution;
 use endf::mf::covariance::Mf33Subsection;
 use endf::mf::mf1::{FissionEnergyRelease, Nu, FISSION_ENERGY_COMPONENTS};
 use endf::mf::mf2::{ResonanceParameters, UnresolvedParameters};
+use endf::mf::mf4::{AngleAtEnergy, AngleDistribution};
 use endf::mf::mf5::EnergyDistribution;
 use endf::mf::mf6::Distribution as Mf6Distribution;
 use endf::{materials_from_str, Material, Section, Tabulated1D, Tabulated2D};
@@ -494,6 +495,63 @@ fn dump_mf33_subsection(d: &mut Dump, sp: &str, sub: &Mf33Subsection) {
     }
 }
 
+/// Mirrors `dump_angle_distribution` in `tools/dump_golden.py`.
+fn dump_angle_distribution(d: &mut Dump, path: &str, dist: &AngleDistribution) {
+    d.floats(format!("{path}/energy"), dist.energy.clone());
+    d.int(format!("{path}/n_mu"), dist.mu.len() as i64);
+    for (i, mu) in dist.mu.iter().enumerate() {
+        let p = format!("{path}/mu/{i}");
+        match mu {
+            AngleAtEnergy::Legendre(l) => {
+                d.text(format!("{p}/kind"), "legendre");
+                d.floats(format!("{p}/coef"), l.coefficients.clone());
+            }
+            AngleAtEnergy::Tabulated(f) => {
+                d.text(format!("{p}/kind"), "tabulated");
+                d.tab1(&format!("{p}/f"), f);
+            }
+            AngleAtEnergy::Tabular(t) => {
+                d.text(format!("{p}/kind"), "tabular");
+                d.text(format!("{p}/interpolation"), t.interpolation.name());
+                d.floats(format!("{p}/x"), t.x.clone());
+                d.floats(format!("{p}/p"), t.p.clone());
+                if let Some(c) = &t.c {
+                    d.floats(format!("{p}/c"), c.clone());
+                }
+                d.floats(format!("{p}/cdf"), t.cdf());
+            }
+            AngleAtEnergy::Isotropic(u) => {
+                d.text(format!("{p}/kind"), "uniform");
+                d.float(format!("{p}/a"), u.a);
+                d.float(format!("{p}/b"), u.b);
+            }
+        }
+    }
+}
+
+/// Mirrors `dump_ace_angle` in `tools/dump_golden.py`.
+fn dump_ace_angle(d: &mut Dump, path: &str, t: &ace::Table) {
+    if t.data_type().ok() != Some(ace::TableType::NeutronContinuous) {
+        return;
+    }
+    let (land, and) = (t.jxs[8], t.jxs[9]);
+    if land <= 0 {
+        return;
+    }
+
+    let n = t.nxs[5] + 1;
+    d.int(format!("{path}/n"), n);
+    let locators: Vec<i64> = (0..n).map(|i| t.xss[(land + i) as usize] as i64).collect();
+    d.ints(format!("{path}/locators"), locators.clone());
+    for (i, &locator) in locators.iter().enumerate() {
+        if locator <= 0 {
+            continue;
+        }
+        let dist = AngleDistribution::from_ace(t, and, locator).unwrap();
+        dump_angle_distribution(d, &format!("{path}/{i}"), &dist);
+    }
+}
+
 /// Mirrors `ACE_XSS_SAMPLES` in `tools/dump_golden.py`.
 const ACE_XSS_SAMPLES: usize = 2000;
 
@@ -539,6 +597,8 @@ fn dump_ace_table(d: &mut Dump, path: &str, t: &ace::Table) {
         idx.iter().map(|&i| i as i64).collect(),
     );
     d.floats(format!("{path}/xss_val"), values);
+
+    dump_ace_angle(d, &format!("{path}/and"), t);
 
     // The unresolved resonance block, when the table has one.
     if let Some(urr) = endf::urr::ProbabilityTables::from_ace(t) {
@@ -734,6 +794,19 @@ fn dump_section(d: &mut Dump, path: &str, section: &Section) {
                 d.floats(format!("{sp}/E"), t.energy.clone());
                 for (i, mu) in t.mu.iter().enumerate() {
                     d.tab1(&format!("{sp}/mu/{i}"), mu);
+                }
+            }
+
+            // The interpreted form, which is what a consumer actually uses.
+            let dist = AngleDistribution::from_mf4(s);
+            dump_angle_distribution(d, &format!("{path}/angle"), &dist);
+            if !dist.energy.is_empty() {
+                for cutoff in [-1.0, -0.5, 0.0, 0.5] {
+                    let name = format!("{cutoff:+.1}");
+                    d.floats(
+                        format!("{path}/angle/forward_fraction/{name}"),
+                        dist.forward_fraction(cutoff),
+                    );
                 }
             }
         }

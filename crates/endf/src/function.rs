@@ -1,5 +1,7 @@
 //! Tabulated functions: the TAB1 and TAB2 types of the ENDF-6 format.
 
+use crate::data::EV_PER_MEV;
+
 /// A one-dimensional tabulated function, mirroring the format's TAB1 type.
 ///
 /// The `(x, y)` pairs are interpolated according to `interpolation`, one scheme
@@ -152,6 +154,151 @@ impl Tabulated1D {
         }
         out
     }
+
+    /// Read a tabulated function from an ACE table's XSS array.
+    ///
+    /// `idx` is the zero-based offset of the record within `xss`, which begins
+    /// with the number of interpolation regions. `convert_units` multiplies the
+    /// abscissa by [`EV_PER_MEV`], which is wanted whenever it is an energy.
+    ///
+    /// The number of values consumed is
+    /// `2 + 2 * n_regions + 2 * n_pairs`; [`Self::ace_len`] computes it for a
+    /// caller that has to step past the record.
+    pub fn from_ace(xss: &[f64], idx: usize, convert_units: bool) -> Tabulated1D {
+        let at = |i: usize| xss.get(i).copied().unwrap_or(0.0);
+
+        let n_regions = at(idx) as usize;
+        let n_pairs = at(idx + 1 + 2 * n_regions) as usize;
+
+        let mut idx = idx + 1;
+        let (breakpoints, interpolation) = if n_regions > 0 {
+            (
+                (0..n_regions).map(|i| at(idx + i) as i32).collect(),
+                (0..n_regions)
+                    .map(|i| at(idx + n_regions + i) as i32)
+                    .collect(),
+            )
+        } else {
+            // Zero regions means one linear-linear region over the whole table.
+            (vec![n_pairs as i32], vec![2])
+        };
+
+        idx += 2 * n_regions + 1;
+        let mut x: Vec<f64> = (0..n_pairs).map(|i| at(idx + i)).collect();
+        let y: Vec<f64> = (0..n_pairs).map(|i| at(idx + n_pairs + i)).collect();
+
+        if convert_units {
+            for v in &mut x {
+                *v *= EV_PER_MEV;
+            }
+        }
+
+        Tabulated1D {
+            x,
+            y,
+            breakpoints,
+            interpolation,
+        }
+    }
+
+    /// Number of XSS values the record at `idx` occupies.
+    pub fn ace_len(xss: &[f64], idx: usize) -> usize {
+        let at = |i: usize| xss.get(i).copied().unwrap_or(0.0);
+        let n_regions = at(idx) as usize;
+        let n_pairs = at(idx + 1 + 2 * n_regions) as usize;
+        2 + 2 * n_regions + 2 * n_pairs
+    }
+}
+
+/// A Legendre series, `sum_l c_l P_l(x)`.
+///
+/// The angular distributions of MF=4 are given this way. The coefficients are
+/// the series' own, not those of the equivalent power polynomial, so this is a
+/// different type from [`Polynomial`] rather than a conversion of it.
+///
+/// Evaluation and integration follow `numpy.polynomial.legendre` step for step
+/// — Clenshaw recurrence for the value, the three-term relation for the
+/// antiderivative — because the Python reader uses it and the two have to agree
+/// to the last bit.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Legendre {
+    /// Coefficients in ascending order of degree.
+    pub coefficients: Vec<f64>,
+}
+
+impl Legendre {
+    /// A series with the given coefficients, kept exactly as passed.
+    ///
+    /// Trailing zeros are not dropped, matching `numpy.polynomial`, whose
+    /// constructor takes `trim=False`. It matters: the Clenshaw recurrence
+    /// takes one step per coefficient, so a trailing zero moves the last bits
+    /// of every value the series produces.
+    pub fn new(coefficients: Vec<f64>) -> Self {
+        Legendre { coefficients }
+    }
+
+    /// Evaluate the series at `x` by Clenshaw recurrence, as `legval` does.
+    ///
+    /// The two ratios are formed before they multiply `c1`, which is how
+    /// NumPy 2 spells the recurrence. Associating the other way — as NumPy 1
+    /// did — changes the last bit or two of the result.
+    pub fn eval(&self, x: f64) -> f64 {
+        legval(x, &self.coefficients)
+    }
+
+    /// The antiderivative that vanishes at zero, as `legint` gives it.
+    pub fn integ(&self) -> Legendre {
+        let c = &self.coefficients;
+        let n = c.len();
+        if n == 0 {
+            return Legendre::new(Vec::new());
+        }
+        if n == 1 && c[0] == 0.0 {
+            return Legendre::new(vec![0.0]);
+        }
+
+        let mut tmp = vec![0.0; n + 1];
+        tmp[1] = c[0];
+        if n > 1 {
+            tmp[2] = c[1] / 3.0;
+        }
+        for j in 2..n {
+            let d = c[j] / (2.0 * j as f64 + 1.0);
+            tmp[j + 1] = d;
+            tmp[j - 1] -= d;
+        }
+        // Shift so the antiderivative vanishes at the lower bound of zero.
+        // `tmp[0]` is still zero at this point, so subtracting the value there
+        // is the whole of the adjustment. `legint` evaluates the untrimmed
+        // coefficients here and trims only what it returns.
+        tmp[0] -= legval(0.0, &tmp);
+        Legendre::new(tmp)
+    }
+}
+
+/// `numpy.polynomial.legendre.legval`: a Legendre series at one point.
+///
+/// A free function because [`Legendre::integ`] has to evaluate coefficients
+/// that have not been trimmed yet, exactly as `legint` does.
+fn legval(x: f64, c: &[f64]) -> f64 {
+    match c.len() {
+        0 => 0.0,
+        1 => c[0],
+        2 => c[0] + c[1] * x,
+        len => {
+            let mut nd = len;
+            let mut c0 = c[len - 2];
+            let mut c1 = c[len - 1];
+            for i in 3..=len {
+                let tmp = c0;
+                nd -= 1;
+                let nd_f = nd as f64;
+                c0 = c[len - i] - c1 * ((nd_f - 1.0) / nd_f);
+                c1 = tmp + c1 * x * ((2.0 * nd_f - 1.0) / nd_f);
+            }
+            c0 + c1 * x
+        }
+    }
 }
 
 /// Interpolation metadata for a two-dimensional function, the format's TAB2.
@@ -226,6 +373,66 @@ mod tests {
         assert!((it[0] - 0.0).abs() < 1e-12);
         assert!((it[1] - 5.0).abs() < 1e-12);
         assert!((it[2] - 10.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn legendre_evaluates_the_series() {
+        // P_2(x) = (3x^2 - 1)/2, so P_2(0.5) = -0.125 exactly.
+        let l = Legendre::new(vec![0.0, 0.0, 1.0]);
+        assert_eq!(l.eval(0.5), -0.125);
+        assert_eq!(Legendre::new(vec![3.0]).eval(7.0), 3.0);
+        assert_eq!(Legendre::new(vec![1.0, 2.0]).eval(0.25), 1.5);
+    }
+
+    #[test]
+    fn legendre_integrates_as_numpy_does() {
+        // The antiderivative of P_2 is (P_3 - P_1)/5, and numpy gives the
+        // coefficients and the value at one to the last bit.
+        let a = Legendre::new(vec![0.0, 0.0, 1.0]).integ();
+        assert_eq!(a.coefficients, vec![0.0, -0.2, 0.0, 0.2]);
+        assert_eq!(a.eval(1.0), -5.551115123125783e-17);
+    }
+
+    #[test]
+    fn legendre_keeps_trailing_zeros() {
+        // numpy's constructor does not trim, and the recurrence takes a step
+        // per coefficient, so the length is part of the answer.
+        let l = Legendre::new(vec![1.0, 0.0, 0.0]);
+        assert_eq!(l.coefficients.len(), 3);
+        assert_eq!(l.integ().coefficients, vec![0.0, 1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn reads_a_tabulated_function_from_an_ace_array() {
+        // One region, three pairs, energies in MeV.
+        let xss = vec![
+            1.0, // n_regions
+            3.0, // breakpoint
+            5.0, // log-log
+            3.0, // n_pairs
+            1.0, 2.0, 3.0, // x, in MeV
+            10.0, 20.0, 30.0, // y
+        ];
+        let f = Tabulated1D::from_ace(&xss, 0, true);
+        assert_eq!(f.breakpoints, vec![3]);
+        assert_eq!(f.interpolation, vec![5]);
+        assert_eq!(f.x, vec![1.0e6, 2.0e6, 3.0e6]);
+        assert_eq!(f.y, vec![10.0, 20.0, 30.0]);
+        assert_eq!(Tabulated1D::ace_len(&xss, 0), xss.len());
+
+        // Left in MeV when the abscissa is not an energy.
+        assert_eq!(Tabulated1D::from_ace(&xss, 0, false).x, vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn zero_regions_in_an_ace_array_means_one_linear_region() {
+        let xss = vec![0.0, 2.0, 1.0, 2.0, 7.0, 8.0];
+        let f = Tabulated1D::from_ace(&xss, 0, false);
+        assert_eq!(f.breakpoints, vec![2]);
+        assert_eq!(f.interpolation, vec![2]);
+        assert_eq!(f.x, vec![1.0, 2.0]);
+        assert_eq!(f.y, vec![7.0, 8.0]);
+        assert_eq!(Tabulated1D::ace_len(&xss, 0), xss.len());
     }
 
     #[test]

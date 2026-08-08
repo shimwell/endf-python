@@ -355,6 +355,51 @@ def dump_mf4(d: Dump, path: str, mt: int, section: dict) -> None:
         for i, mu in enumerate(sub.get("mu", [])):
             d.tab1(f"{sp}/mu/{i}", mu)
 
+    # The interpreted form, which is what a consumer actually uses.
+    from endf.mf4 import AngleDistribution
+
+    dist = AngleDistribution.from_dict(section)
+    dump_angle_distribution(d, f"{path}/angle", dist)
+    if len(dist.energy) > 0:
+        for cutoff in (-1.0, -0.5, 0.0, 0.5):
+            name = f"{cutoff:+.1f}"
+            d.floats(
+                f"{path}/angle/forward_fraction/{name}", dist.forward_fraction(cutoff)
+            )
+
+
+def dump_angle_distribution(d: Dump, path: str, dist) -> None:
+    """An :class:`endf.mf4.AngleDistribution`, whichever shapes it holds."""
+    from numpy.polynomial import Legendre
+
+    from endf.function import Tabulated1D
+    from endf.univariate import Tabular, Uniform
+
+    d.floats(f"{path}/energy", dist.energy)
+    d.int(f"{path}/n_mu", len(dist.mu))
+    for i, mu in enumerate(dist.mu):
+        p = f"{path}/mu/{i}"
+        if isinstance(mu, Legendre):
+            d.text(f"{p}/kind", "legendre")
+            d.floats(f"{p}/coef", mu.coef)
+        elif isinstance(mu, Tabulated1D):
+            d.text(f"{p}/kind", "tabulated")
+            d.tab1(f"{p}/f", mu)
+        elif isinstance(mu, Tabular):
+            d.text(f"{p}/kind", "tabular")
+            d.text(f"{p}/interpolation", mu.interpolation)
+            d.floats(f"{p}/x", mu.x)
+            d.floats(f"{p}/p", mu.p)
+            if mu.c is not None:
+                d.floats(f"{p}/c", mu.c)
+            d.floats(f"{p}/cdf", mu.cdf())
+        elif isinstance(mu, Uniform):
+            d.text(f"{p}/kind", "uniform")
+            d.float(f"{p}/a", mu.a)
+            d.float(f"{p}/b", mu.b)
+        else:
+            raise TypeError(f"unexpected angle distribution {type(mu)}")
+
 
 def dump_mf5(d: Dump, path: str, mt: int, section: dict) -> None:
     d.int(f"{path}/ZA", section["ZA"])
@@ -808,6 +853,35 @@ def ace_xss_indices(n: int, jxs) -> list[int]:
     return sorted(idx)
 
 
+def dump_ace_angle(d: Dump, path: str, table) -> None:
+    """Every angular distribution an ACE neutron table holds.
+
+    LAND (JXS(8)) locates one array per reaction that emits a neutron, elastic
+    scattering first; the arrays themselves sit in AND (JXS(9)). A locator of
+    -1 means the angle is bound up with the energy in the DLW block instead,
+    and 0 means isotropic — neither has an array to read here.
+    """
+    from endf.ace import TableType
+    from endf.mf4 import AngleDistribution
+
+    if table.data_type != TableType.NEUTRON_CONTINUOUS:
+        return
+    land, and_ = table.jxs[8], table.jxs[9]
+    if land <= 0:
+        return
+
+    # NXS(5) reactions besides elastic scattering.
+    n = int(table.nxs[5]) + 1
+    d.int(f"{path}/n", n)
+    locators = [int(table.xss[land + i]) for i in range(n)]
+    d.ints(f"{path}/locators", locators)
+    for i, locator in enumerate(locators):
+        if locator <= 0:
+            continue
+        dist = AngleDistribution.from_ace(table, and_, locator)
+        dump_angle_distribution(d, f"{path}/{i}", dist)
+
+
 def dump_ace(d: Dump, path: str, table) -> None:
     d.text(f"{path}/name", table.name)
     d.float(f"{path}/atomic_weight_ratio", table.atomic_weight_ratio)
@@ -824,6 +898,8 @@ def dump_ace(d: Dump, path: str, table) -> None:
     idx = ace_xss_indices(len(table.xss), table.jxs)
     d.ints(f"{path}/xss_idx", idx)
     d.floats(f"{path}/xss_val", [table.xss[i] for i in idx])
+
+    dump_ace_angle(d, f"{path}/and", table)
 
     # The unresolved resonance block, when the table has one.
     from endf.urr import ProbabilityTables

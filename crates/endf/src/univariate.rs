@@ -79,11 +79,18 @@ fn exprel(x: f64) -> f64 {
 pub struct Discrete {
     pub x: Vec<f64>,
     pub p: Vec<f64>,
+    /// The cumulative distribution as the source file gave it.
+    ///
+    /// ACE tables store a CDF next to the density; it is kept verbatim rather
+    /// than recomputed so the values round-trip exactly. [`Self::cdf`] is the
+    /// computed equivalent, and the two need not agree bit for bit. `None`
+    /// when the source format supplied no CDF.
+    pub c: Option<Vec<f64>>,
 }
 
 impl Discrete {
     pub fn new(x: Vec<f64>, p: Vec<f64>) -> Discrete {
-        Discrete { x, p }
+        Discrete { x, p, c: None }
     }
 
     pub fn len(&self) -> usize {
@@ -143,6 +150,7 @@ impl Discrete {
         Ok(Discrete {
             x: merged.iter().map(|&(v, _)| v).collect(),
             p: merged.iter().map(|&(_, p)| p).collect(),
+            c: None,
         })
     }
 }
@@ -153,6 +161,9 @@ pub struct Tabular {
     pub x: Vec<f64>,
     pub p: Vec<f64>,
     pub interpolation: Interpolation,
+    /// The cumulative distribution as the source file gave it; see
+    /// [`Discrete::c`].
+    pub c: Option<Vec<f64>>,
 }
 
 impl Tabular {
@@ -161,6 +172,22 @@ impl Tabular {
             x,
             p,
             interpolation,
+            c: None,
+        }
+    }
+
+    /// The same, with the CDF the source file supplied alongside the density.
+    pub fn with_cdf(
+        x: Vec<f64>,
+        p: Vec<f64>,
+        interpolation: Interpolation,
+        c: Vec<f64>,
+    ) -> Tabular {
+        Tabular {
+            x,
+            p,
+            interpolation,
+            c: Some(c),
         }
     }
 
@@ -255,7 +282,12 @@ impl Uniform {
     /// The same distribution written as a two-point tabulation.
     pub fn to_tabular(&self) -> Tabular {
         let p = 1.0 / (self.b - self.a);
-        Tabular::new(vec![self.a, self.b], vec![p, p], Interpolation::Histogram)
+        Tabular::with_cdf(
+            vec![self.a, self.b],
+            vec![p, p],
+            Interpolation::Histogram,
+            vec![0.0, 1.0],
+        )
     }
 
     pub fn cdf(&self) -> Vec<f64> {
