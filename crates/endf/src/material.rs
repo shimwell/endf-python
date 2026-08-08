@@ -14,6 +14,16 @@ use crate::records::{field, Reader};
 /// Python reader for them while the port proceeds file by file.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Section {
+    /// MF=1 MT=451, descriptive data and the section directory.
+    Mf1Mt451(Box<mf::mf1::Mf1Mt451>),
+    /// MF=1 MT=452 or MT=456, total or prompt neutrons per fission.
+    Mf1Mt452(mf::mf1::Mf1Mt452),
+    /// MF=1 MT=455, delayed neutron data.
+    Mf1Mt455(mf::mf1::Mf1Mt455),
+    /// MF=1 MT=458, components of the fission energy release.
+    Mf1Mt458(mf::mf1::Mf1Mt458),
+    /// MF=1 MT=460, delayed photon data.
+    Mf1Mt460(mf::mf1::Mf1Mt460),
     /// MF=3, reaction cross sections.
     Mf3(mf::mf3::Mf3),
     Unparsed {
@@ -160,6 +170,52 @@ impl Material {
             _ => None,
         }
     }
+
+    /// The MF=1 MT=451 descriptive data, which every material carries.
+    pub fn mf1_mt451(&self) -> Option<&mf::mf1::Mf1Mt451> {
+        match self.section_data.get(&(1, 451))? {
+            Section::Mf1Mt451(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// A neutron yield: MT=452 total, MT=456 prompt.
+    pub fn mf1_mt452(&self, mt: i32) -> Option<&mf::mf1::Mf1Mt452> {
+        match self.section_data.get(&(1, mt))? {
+            Section::Mf1Mt452(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=1 MT=455 delayed neutron data.
+    pub fn mf1_mt455(&self) -> Option<&mf::mf1::Mf1Mt455> {
+        match self.section_data.get(&(1, 455))? {
+            Section::Mf1Mt455(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=1 MT=458 fission energy release.
+    pub fn mf1_mt458(&self) -> Option<&mf::mf1::Mf1Mt458> {
+        match self.section_data.get(&(1, 458))? {
+            Section::Mf1Mt458(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=1 MT=460 delayed photon data.
+    pub fn mf1_mt460(&self) -> Option<&mf::mf1::Mf1Mt460> {
+        match self.section_data.get(&(1, 460))? {
+            Section::Mf1Mt460(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The sublibrary number (NSUB) from MT=451, which says what kind of
+    /// evaluation this is: 10 incident-neutron, 4 radioactive decay, and so on.
+    pub fn nsub(&self) -> Option<i64> {
+        Some(self.mf1_mt451()?.nsub)
+    }
 }
 
 /// Dispatch a section to its file's parser.
@@ -168,8 +224,13 @@ impl Material {
 /// [`Section::Unparsed`] with its text preserved.
 fn parse_section(mf: i32, mt: i32, text: &str) -> Result<Section> {
     let mut r = Reader::new(text);
-    Ok(match mf {
-        3 => Section::Mf3(mf::mf3::parse_mf3(&mut r)?),
+    Ok(match (mf, mt) {
+        (1, 451) => Section::Mf1Mt451(Box::new(mf::mf1::parse_mf1_mt451(&mut r)?)),
+        (1, 452) | (1, 456) => Section::Mf1Mt452(mf::mf1::parse_mf1_mt452(&mut r)?),
+        (1, 455) => Section::Mf1Mt455(mf::mf1::parse_mf1_mt455(&mut r)?),
+        (1, 458) => Section::Mf1Mt458(mf::mf1::parse_mf1_mt458(&mut r)?),
+        (1, 460) => Section::Mf1Mt460(mf::mf1::parse_mf1_mt460(&mut r)?),
+        (3, _) => Section::Mf3(mf::mf3::parse_mf3(&mut r)?),
         _ => Section::Unparsed { mf, mt },
     })
 }
