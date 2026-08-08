@@ -149,9 +149,20 @@ where
     I: IntoIterator<Item = P>,
     P: AsRef<std::path::Path>,
 {
-    let mut raw: BTreeMap<(i64, i64), BTreeMap<i64, RawIsomer>> = BTreeMap::new();
+    let mut materials = Vec::new();
     for filename in decay_files {
-        let material = Material::from_file(filename.as_ref())?;
+        materials.push(Material::from_file(filename.as_ref())?);
+    }
+    Ok(isomer_table_from_materials(&materials))
+}
+
+/// The same, from materials already read.
+///
+/// This is where the work happens; [`isomer_table`] is the convenience that
+/// opens the files first.
+pub fn isomer_table_from_materials(materials: &[Material]) -> IsomerTable {
+    let mut raw: BTreeMap<(i64, i64), BTreeMap<i64, RawIsomer>> = BTreeMap::new();
+    for material in materials {
         let Some(section) = material.mf8_mt457() else {
             continue;
         };
@@ -196,7 +207,7 @@ where
         }
         table.insert(za, out);
     }
-    Ok(table)
+    table
 }
 
 /// Default tolerance in eV for matching a level energy to an isomer energy.
@@ -271,11 +282,11 @@ pub fn level_to_isomeric_state(
 mod tests {
     use super::*;
 
-    const IN115: &str = include_str!("../../../tests/n-049_In-115_trimmed.endf");
+    const IN115: &[u8] = include_bytes!("../../../tests/n-049_In-115_trimmed.endf.xz");
 
     #[test]
     fn joins_mf8_mf9_and_mf10_for_each_reaction() {
-        let m = Material::from_str(IN115).unwrap();
+        let m = Material::from_str(&crate::testdata::text(IN115)).unwrap();
         let production = radionuclide_production(&m);
 
         // The evaluation gives isomer production for three reactions, each to
@@ -419,12 +430,11 @@ mod tests {
         // branches: the first decays only by beta-, so it has no isomeric
         // transition to measure its energy by, and the second transitions down
         // to the first.
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests");
-        let table = isomer_table([
-            dir.join("dec-049_In_116m1.endf"),
-            dir.join("dec-049_In_116m2.endf"),
-        ])
-        .unwrap();
+        const M1: &[u8] = include_bytes!("../../../tests/dec-049_In_116m1.endf.xz");
+        const M2: &[u8] = include_bytes!("../../../tests/dec-049_In_116m2.endf.xz");
+        let materials =
+            [M1, M2].map(|raw| Material::from_str(&crate::testdata::text(raw)).unwrap());
+        let table = isomer_table_from_materials(&materials);
 
         let in116 = &table[&(49, 116)];
         assert_eq!(in116.keys().copied().collect::<Vec<_>>(), [1, 2]);

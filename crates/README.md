@@ -10,6 +10,11 @@ crates/
 └── endf-py/   PyO3 bindings. Thin: every type forwards to the Rust one.
 ```
 
+The `endf` crate has no dependencies. Its tests have one: the fixtures and the
+golden dumps are stored xz-compressed, and `lzma-rs` (pure Rust) reads them.
+That is a `[dev-dependencies]` entry, so it is not built for anything that uses
+the crate.
+
 ## Why two crates
 
 `endf` describes the ENDF-6 format and nothing else. A simulation-ready

@@ -39,11 +39,11 @@ pub fn parse_mf3(reader: &mut Reader) -> Result<Mf3> {
 mod tests {
     use crate::material::Material;
 
-    const FIXTURE: &str = include_str!("../../../../tests/n-095_Am_244.endf");
+    const FIXTURE: &[u8] = include_bytes!("../../../../tests/n-095_Am_244.endf.xz");
 
     #[test]
     fn reads_the_total_cross_section() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let total = m.mf3(1).expect("MF=3 MT=1 is present");
 
         assert_eq!(total.za, 95244);
@@ -68,7 +68,7 @@ mod tests {
     fn the_sum_rule_holds_at_the_first_energy() {
         // MT=1 is total, and for this evaluation elastic (2), fission (18) and
         // capture (102) are its parts at thermal energies.
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let total = m.mf3(1).unwrap();
         let parts: f64 = [2, 18, 102]
             .iter()
@@ -89,7 +89,7 @@ mod tests {
 
     #[test]
     fn interpolating_returns_a_tabulated_point() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let total = m.mf3(1).unwrap();
         let x0 = total.sigma.x[0];
         assert_eq!(total.sigma.eval(x0), total.sigma.y[0]);

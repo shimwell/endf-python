@@ -32,6 +32,9 @@ pub mod product;
 pub mod radionuclide_production;
 pub mod reaction;
 pub mod records;
+
+#[cfg(test)]
+mod testdata;
 pub mod univariate;
 pub mod urr;
 
@@ -46,8 +49,8 @@ pub use incident_neutron::IncidentNeutron;
 pub use material::{get_materials, materials_from_str, Material, Section};
 pub use product::{EmissionMode, Product, Yield};
 pub use radionuclide_production::{
-    isomer_table, level_to_isomeric_state, radionuclide_production, Isomer, IsomerTable,
-    RadionuclideProduction,
+    isomer_table, isomer_table_from_materials, level_to_isomeric_state, radionuclide_production,
+    Isomer, IsomerTable, RadionuclideProduction,
 };
 pub use reaction::{reaction_mt, reaction_name, Reaction, FISSION_MTS};
 pub use records::{float_endf, int_endf, Cont, Head, ListRecord, Matrix, Reader, Tab1, Tab2};

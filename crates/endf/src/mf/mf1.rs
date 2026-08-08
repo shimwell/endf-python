@@ -351,11 +351,11 @@ pub fn parse_mf1_mt460(reader: &mut Reader) -> Result<Mf1Mt460> {
 mod tests {
     use crate::material::Material;
 
-    const FIXTURE: &str = include_str!("../../../../tests/n-095_Am_244.endf");
+    const FIXTURE: &[u8] = include_bytes!("../../../../tests/n-095_Am_244.endf.xz");
 
     #[test]
     fn reads_the_descriptive_header() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let d = m.mf1_mt451().expect("MF=1 MT=451 is present");
         assert_eq!(d.za, 95244);
         // NSUB=10 is incident-neutron data.
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn the_directory_agrees_with_the_sections_present() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let d = m.mf1_mt451().unwrap();
         for &(mf, mt, ..) in &d.section_list {
             assert!(

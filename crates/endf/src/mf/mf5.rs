@@ -422,11 +422,11 @@ mod tests {
     use super::*;
     use crate::material::Material;
 
-    const FIXTURE: &str = include_str!("../../../../tests/n-095_Am_244.endf");
+    const FIXTURE: &[u8] = include_bytes!("../../../../tests/n-095_Am_244.endf.xz");
 
     #[test]
     fn reads_the_fission_neutron_spectrum() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let d = m.mf5(18).expect("MF=5 MT=18 is present");
         assert_eq!(d.za, 95244);
         assert_eq!(d.subsections.len(), d.nk as usize);

@@ -126,13 +126,12 @@ impl ProbabilityTables {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ace;
 
     #[test]
     fn a_light_nuclide_has_no_unresolved_region() {
         // Li6 has no URR: JXS(23) is zero, and the reader says so rather than
         // reading whatever happens to sit at index zero.
-        let tables = ace::get_tables("../../tests/Li6.ace").unwrap();
+        let tables = crate::testdata::ace_tables(crate::testdata::LI6_ACE);
         assert_eq!(tables[0].jxs[23], 0);
         assert!(ProbabilityTables::from_ace(&tables[0]).is_none());
     }

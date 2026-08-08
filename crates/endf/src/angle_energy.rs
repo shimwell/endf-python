@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn reads_every_distribution_li6_holds() {
-        let tables = ace::get_tables("../../tests/Li6.ace").unwrap();
+        let tables = crate::testdata::ace_tables(crate::testdata::LI6_ACE);
         let t = &tables[0];
 
         let mut seen = 0;

@@ -222,12 +222,12 @@ pub fn parse_mf28(reader: &mut Reader) -> Result<Mf28> {
 mod tests {
     use crate::material::Material;
 
-    const PHOTOAT_H: &str = include_str!("../../../../tests/photoat-001_H_000.endf");
-    const ATOM_H: &str = include_str!("../../../../tests/atom-001_H_000.endf");
+    const PHOTOAT_H: &[u8] = include_bytes!("../../../../tests/photoat-001_H_000.endf.xz");
+    const ATOM_H: &[u8] = include_bytes!("../../../../tests/atom-001_H_000.endf.xz");
 
     #[test]
     fn reads_photo_atomic_cross_sections() {
-        let m = Material::from_str(PHOTOAT_H).unwrap();
+        let m = Material::from_str(&crate::testdata::text(PHOTOAT_H)).unwrap();
         // MT=501 is the total photon interaction cross section.
         let total = m.mf23(501).expect("MF=23 MT=501 is present");
         assert_eq!(total.za, 1000, "photo-atomic data is per element, so A=0");
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn reads_the_incoherent_scattering_function() {
-        let m = Material::from_str(PHOTOAT_H).unwrap();
+        let m = Material::from_str(&crate::testdata::text(PHOTOAT_H)).unwrap();
         // MT=502 coherent form factor, MT=504 incoherent scattering function.
         let sf = m.mf27(504).expect("MF=27 MT=504 is present");
         assert_eq!(sf.z, 1.0, "hydrogen");
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn reads_atomic_relaxation() {
-        let m = Material::from_str(ATOM_H).unwrap();
+        let m = Material::from_str(&crate::testdata::text(ATOM_H)).unwrap();
         let relax = m.mf28(533).expect("MF=28 MT=533 is present");
         assert_eq!(relax.shells.len(), relax.nss as usize);
         // Hydrogen has only the K shell, and with one electron there is

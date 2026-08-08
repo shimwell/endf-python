@@ -31,6 +31,33 @@ use endf::univariate::Univariate;
 use endf::AngleEnergy;
 use endf::{materials_from_str, Material, Section, Tabulated1D, Tabulated2D};
 
+/// Read a file, decompressing it when the name says it is compressed.
+///
+/// Both the fixtures and the golden dumps are stored xz-compressed: an
+/// evaluation is highly repetitive and compresses about six to one, and the
+/// dumps about seven. `lzma-rs` is a dev-dependency, so nothing that uses the
+/// crate pays for it.
+fn read_text(path: &Path) -> String {
+    let raw = std::fs::read(path).unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+    if path.extension().is_some_and(|e| e == "xz") {
+        let mut out = Vec::new();
+        lzma_rs::xz_decompress(&mut raw.as_slice(), &mut out)
+            .unwrap_or_else(|e| panic!("decompressing {}: {e}", path.display()));
+        return String::from_utf8(out)
+            .unwrap_or_else(|e| panic!("{} is not UTF-8: {e}", path.display()));
+    }
+    String::from_utf8(raw).unwrap_or_else(|e| panic!("{} is not UTF-8: {e}", path.display()))
+}
+
+/// Whether a path names a fixture of the given format, `.xz` or not.
+fn has_kind(path: &Path, kind: &str) -> bool {
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let name = name.strip_suffix(".xz").unwrap_or(&name);
+    std::path::Path::new(name)
+        .extension()
+        .is_some_and(|e| e == kind)
+}
+
 /// Mirrors `MAX_SAMPLES` in `tools/dump_golden.py`.
 const MAX_SAMPLES: usize = 24;
 
@@ -1930,8 +1957,7 @@ fn compare(name: &str, ours: &BTreeMap<String, Value>, theirs: &BTreeMap<String,
 
 /// Compare one golden file against the Rust reader. Returns paths compared.
 fn check(golden_path: &Path) -> usize {
-    let text = std::fs::read_to_string(golden_path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", golden_path.display()));
+    let text = read_text(golden_path);
     let name = golden_path
         .file_name()
         .unwrap()
@@ -1942,7 +1968,7 @@ fn check(golden_path: &Path) -> usize {
     let source_path = repo_root().join(&g.source);
 
     if g.kind == "ace" {
-        let tables = ace::get_tables(&source_path)
+        let tables = ace::tables_from_str(&read_text(&source_path), None)
             .unwrap_or_else(|e| panic!("{name}: the Rust reader failed on {}: {e}", g.source));
         assert_eq!(tables.len(), g.n_tables, "{name}: table count");
         let mut d = Dump::default();
@@ -1953,8 +1979,7 @@ fn check(golden_path: &Path) -> usize {
         return g.values.len();
     }
 
-    let endf_text = std::fs::read_to_string(&source_path)
-        .unwrap_or_else(|e| panic!("reading {}: {e}", source_path.display()));
+    let endf_text = read_text(&source_path);
 
     let materials = materials_from_str(&endf_text)
         .unwrap_or_else(|e| panic!("{name}: the Rust reader failed on {}: {e}", g.source));
@@ -1993,7 +2018,7 @@ fn matches_the_python_reader() {
     let mut goldens: Vec<PathBuf> = std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("reading {}: {e}", dir.display()))
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|e| e == "txt"))
+        .filter(|p| has_kind(p, "txt"))
         .collect();
     goldens.sort();
 
@@ -2062,10 +2087,10 @@ fn the_uncovered_parser_list_is_accurate() {
     let mut seen: BTreeSet<i32> = BTreeSet::new();
     for entry in std::fs::read_dir(repo_root().join("tests")).unwrap() {
         let path = entry.unwrap().path();
-        if path.extension().is_none_or(|e| e != "endf") {
+        if !has_kind(&path, "endf") {
             continue;
         }
-        let text = std::fs::read_to_string(&path).unwrap();
+        let text = read_text(&path);
         for m in materials_from_str(&text).unwrap() {
             seen.extend(m.section_data.keys().map(|&(mf, _)| mf));
         }
@@ -2128,10 +2153,10 @@ fn every_distribution_shape_has_a_fixture() {
     let mut seen: BTreeSet<String> = BTreeSet::new();
     for entry in std::fs::read_dir(repo_root().join("crates/endf/tests/golden")).unwrap() {
         let path = entry.unwrap().path();
-        if path.extension().is_none_or(|e| e != "txt") {
+        if !has_kind(&path, "txt") {
             continue;
         }
-        for line in std::fs::read_to_string(&path).unwrap().lines() {
+        for line in read_text(&path).lines() {
             // `V <path>/kind T <hex>`
             let mut parts = line.split_whitespace();
             let (Some("V"), Some(p), Some("T"), Some(hex)) =
@@ -2168,11 +2193,11 @@ fn every_fixture_section_has_a_parser() {
     let mut missing: BTreeSet<(String, i32, i32)> = BTreeSet::new();
     for entry in std::fs::read_dir(repo_root().join("tests")).unwrap() {
         let path = entry.unwrap().path();
-        if path.extension().is_none_or(|e| e != "endf") {
+        if !has_kind(&path, "endf") {
             continue;
         }
         let name = path.file_name().unwrap().to_string_lossy().to_string();
-        let text = std::fs::read_to_string(&path).unwrap();
+        let text = read_text(&path);
         for m in materials_from_str(&text).unwrap() {
             for (&(mf, mt), section) in &m.section_data {
                 if matches!(section, Section::Unparsed { .. }) {

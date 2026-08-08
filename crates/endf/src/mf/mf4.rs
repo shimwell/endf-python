@@ -342,11 +342,11 @@ impl AngleDistribution {
 mod tests {
     use crate::material::Material;
 
-    const FIXTURE: &str = include_str!("../../../../tests/n-095_Am_244.endf");
+    const FIXTURE: &[u8] = include_bytes!("../../../../tests/n-095_Am_244.endf.xz");
 
     #[test]
     fn reads_legendre_angular_distributions() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let d = m.mf4(2).expect("MF=4 MT=2 is present");
         assert_eq!(d.za, 95244);
         // Elastic scattering is given in the centre-of-mass frame.

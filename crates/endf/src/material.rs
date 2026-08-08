@@ -492,17 +492,17 @@ pub fn materials_from_str(text: &str) -> Result<Vec<Material>> {
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = include_str!("../../../tests/n-095_Am_244.endf");
+    const FIXTURE: &[u8] = include_bytes!("../../../tests/n-095_Am_244.endf.xz");
 
     #[test]
     fn reads_the_material_number() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         assert_eq!(m.mat, 9552);
     }
 
     #[test]
     fn finds_the_expected_sections() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let sections = m.sections();
         // The evaluation opens with the descriptive MF=1/MT=451 section and
         // carries resonance parameters and cross sections.
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn section_text_excludes_the_send_record() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let text = &m.section_text[&(3, 1)];
         for line in text.lines() {
             let (_, mf, mt) = control(line).unwrap();
@@ -527,13 +527,13 @@ mod tests {
 
     #[test]
     fn every_section_is_dispatched() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         assert_eq!(m.section_text.len(), m.section_data.len());
     }
 
     #[test]
     fn reads_the_whole_file_as_one_material() {
-        let materials = materials_from_str(FIXTURE).unwrap();
+        let materials = materials_from_str(&crate::testdata::text(FIXTURE)).unwrap();
         assert_eq!(materials.len(), 1);
         assert_eq!(materials[0].mat, 9552);
     }

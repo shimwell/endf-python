@@ -35,6 +35,7 @@ Add a fixture and regenerate only it::
 
 from __future__ import annotations
 
+import lzma
 import sys
 from pathlib import Path
 
@@ -48,7 +49,18 @@ GOLDEN_DIR = ROOT / "crates" / "endf" / "tests" / "golden"
 #: coverage goes.
 FIXTURE_DIRS = [ROOT / "tests", ROOT / "tests" / "data"]
 
+#: Fixtures are stored xz-compressed — an evaluation is highly repetitive and
+#: compresses about six to one — so the suffix to match on is the one before
+#: the `.xz`.
 FIXTURE_SUFFIXES = {".endf", ".dat", ".ace"}
+
+
+def fixture_kind(path: Path) -> str:
+    """The format suffix of a fixture, ignoring any `.xz`."""
+    if path.suffix == ".xz":
+        path = path.with_suffix("")
+    return path.suffix.lower()
+
 
 #: How many interior sample points to record per tabulated function, on top of
 #: the ones the region boundaries force. Enough to exercise each interpolation
@@ -1190,7 +1202,7 @@ DUMPERS = {
 
 
 def dump(path: Path, out) -> None:
-    if path.suffix.lower() == ".ace":
+    if fixture_kind(path) == ".ace":
         dump_ace_file(path, out)
         return
     materials = endf.get_materials(path)
@@ -1354,7 +1366,7 @@ def fixtures() -> list[Path]:
         if not directory.is_dir():
             continue
         for path in sorted(directory.iterdir()):
-            if path.suffix.lower() in FIXTURE_SUFFIXES:
+            if fixture_kind(path) in FIXTURE_SUFFIXES:
                 found.append(path)
     return found
 
@@ -1366,8 +1378,13 @@ def main() -> None:
 
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
     for path in paths:
-        target = GOLDEN_DIR / f"{path.stem}.txt"
-        with open(target, "w") as out:
+        # `Path.stem` strips only one suffix, so a fixture named
+        # `n-095_Am_244.endf.xz` needs both taken off.
+        stem = Path(path.stem).stem if path.suffix == ".xz" else path.stem
+        # The dumps are as repetitive as the evaluations they come from and
+        # compress about seven to one, so they are stored the same way.
+        target = GOLDEN_DIR / f"{stem}.txt.xz"
+        with lzma.open(target, "wt", preset=9) as out:
             dump(path, out)
         print(
             f"{target.relative_to(ROOT)}  <-  {path.relative_to(ROOT)}", file=sys.stderr

@@ -396,18 +396,17 @@ pub fn is_isotropic(angle: &AngleDistribution) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ace;
 
-    const AM244: &str = include_str!("../../../tests/n-095_Am_244.endf");
+    const AM244: &[u8] = include_bytes!("../../../tests/n-095_Am_244.endf.xz");
 
     fn li6() -> IncidentNeutron {
-        let table = ace::get_tables("../../tests/Li6.ace").unwrap().remove(0);
+        let table = crate::testdata::ace_tables(crate::testdata::LI6_ACE).remove(0);
         IncidentNeutron::from_ace(&table, MetastableScheme::Mcnp).unwrap()
     }
 
     #[test]
     fn an_endf_evaluation_gives_one_reaction_per_cross_section() {
-        let m = Material::from_str(AM244).unwrap();
+        let m = Material::from_str(&crate::testdata::text(AM244)).unwrap();
         let n = IncidentNeutron::from_endf(&m).unwrap();
         assert_eq!(n.name(), "Am244");
         assert_eq!((n.atomic_number, n.mass_number, n.metastable), (95, 244, 0));
@@ -430,7 +429,7 @@ mod tests {
 
     #[test]
     fn reactions_are_reachable_by_name() {
-        let m = Material::from_str(AM244).unwrap();
+        let m = Material::from_str(&crate::testdata::text(AM244)).unwrap();
         let n = IncidentNeutron::from_endf(&m).unwrap();
         assert_eq!(n.get_by_name("elastic").unwrap().mt, 2);
         assert_eq!(n.get_by_name("(n,elastic)").unwrap().mt, 2);
@@ -517,7 +516,7 @@ mod tests {
 
     #[test]
     fn adding_a_temperature_that_is_already_there_changes_nothing() {
-        let table = ace::get_tables("../../tests/Li6.ace").unwrap().remove(0);
+        let table = crate::testdata::ace_tables(crate::testdata::LI6_ACE).remove(0);
         let mut n = IncidentNeutron::from_ace(&table, MetastableScheme::Mcnp).unwrap();
         let before = n.clone();
         n.add_temperature_from_ace(&table, MetastableScheme::Mcnp)
@@ -527,7 +526,7 @@ mod tests {
 
     #[test]
     fn the_removal_cross_section_takes_the_forward_cone_off_the_total() {
-        let m = Material::from_str(AM244).unwrap();
+        let m = Material::from_str(&crate::testdata::text(AM244)).unwrap();
         let n = IncidentNeutron::from_endf(&m).unwrap();
 
         let total = &n.get(1).unwrap().xs["0K"];

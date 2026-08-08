@@ -1,7 +1,7 @@
 # Golden files
 
-Each `.txt` here is a reference dump of what the **Python** reader produces for
-one ENDF evaluation. `tests/golden.rs` reads every one of them, runs the Rust
+Each `.txt.xz` here is a reference dump of what the **Python** reader produces
+for one ENDF evaluation. `tests/golden.rs` reads every one of them, runs the Rust
 reader over the evaluation the `SOURCE` line names, and compares.
 
 This is what makes the port safe: the Rust crate is not being written against
@@ -22,9 +22,22 @@ carries), and every reaction the table holds, elastic scattering included.
 That turns the ACE fixtures into a check on the interpretation, not only on the
 numbers.
 
+## Compression
+
+Fixtures and dumps are both stored xz-compressed. An evaluation is highly
+repetitive: the fixtures go 4.1 MB to 655 KB and the dumps 5.3 MB to 748 KB,
+about six and seven to one. The Python side reads them through
+`endf.fileutils.open_text`, which handles `.xz` and leaves anything else alone;
+the Rust side reads them with `lzma-rs`, a pure-Rust **dev-dependency**, so the
+`endf` crate stays dependency-free for anything that uses it.
+
+Nothing else changes: `python tools/dump_golden.py` writes `.txt.xz` and the
+dumps are still byte-reproducible.
+
 ## Adding an evaluation
 
-1. Drop the file in `tests/data/`.
+1. Compress the file and drop it in `tests/`:
+   `python -c "import lzma,sys,pathlib; p=pathlib.Path(sys.argv[1]); pathlib.Path(str(p)+'.xz').write_bytes(lzma.compress(p.read_bytes(), preset=9))" file.endf`
 2. `python tools/dump_golden.py` (or pass the one path to regenerate just it).
 3. `cargo test -p endf`.
 

@@ -620,11 +620,11 @@ mod tests {
     use super::*;
     use crate::material::Material;
 
-    const FIXTURE: &str = include_str!("../../../../tests/n-095_Am_244.endf");
+    const FIXTURE: &[u8] = include_bytes!("../../../../tests/n-095_Am_244.endf.xz");
 
     #[test]
     fn reads_a_scattering_radius_only_range() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let d = m.mf2().expect("MF=2 MT=151 is present");
         assert_eq!(d.za, 95244);
         assert_eq!(d.isotopes.len(), 1);

@@ -81,7 +81,7 @@ class TestForwardFraction:
 
 @pytest.fixture
 def am244():
-    return endf.IncidentNeutron.from_endf('tests/n-095_Am_244.endf')
+    return endf.IncidentNeutron.from_endf('tests/n-095_Am_244.endf.xz')
 
 
 class TestRemovalXS:

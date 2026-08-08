@@ -460,11 +460,11 @@ pub fn parse_mf9_mf10(reader: &mut Reader, mf: i64) -> Result<Mf9Mf10> {
 mod tests {
     use crate::material::Material;
 
-    const IN115: &str = include_str!("../../../../tests/n-049_In-115_trimmed.endf");
+    const IN115: &[u8] = include_bytes!("../../../../tests/n-049_In-115_trimmed.endf.xz");
 
     #[test]
     fn reads_isomer_production() {
-        let m = Material::from_str(IN115).unwrap();
+        let m = Material::from_str(&crate::testdata::text(IN115)).unwrap();
         // In-115 (n,gamma) populating the In-116 first isomeric state. This is
         // where an isomeric branching ratio comes from.
         let mf9 = m.mf9(102).expect("MF=9 MT=102 is present");
@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn reads_isomer_production_cross_sections() {
-        let m = Material::from_str(IN115).unwrap();
+        let m = Material::from_str(&crate::testdata::text(IN115)).unwrap();
         // MF=10 carries a cross section for the same kind of product.
         let mf10 = m.mf10(16).expect("MF=10 MT=16 is present");
         assert_eq!(mf10.mf, 10);
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn reads_radioactive_production() {
-        let m = Material::from_str(IN115).unwrap();
+        let m = Material::from_str(&crate::testdata::text(IN115)).unwrap();
         let mf8 = m.mf8(102).expect("MF=8 MT=102 is present");
         assert_eq!(mf8.subsections.len(), mf8.ns as usize);
         assert!(!mf8.subsections.is_empty());

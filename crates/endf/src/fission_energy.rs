@@ -225,7 +225,7 @@ fn sher_beck_prompt_neutrons(zeroth: f64, nu: Option<&Nu>) -> Result<Component> 
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = include_str!("../../../tests/n-095_Am_244.endf");
+    const FIXTURE: &[u8] = include_bytes!("../../../tests/n-095_Am_244.endf.xz");
 
     /// Values taken from the Python implementation on the same evaluation, so
     /// this is a parity test and not just a plausibility one. The golden
@@ -233,7 +233,7 @@ mod tests {
     /// pinned separately because they are computed rather than read.
     #[test]
     fn matches_the_python_fission_energy_release() {
-        let m = Material::from_str(FIXTURE).unwrap();
+        let m = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
         let nu = m.mf1_mt452(452).map(|s| &s.nu);
         let fer = FissionEnergyRelease::from_material(&m, nu).unwrap();
 
@@ -294,8 +294,8 @@ mod tests {
 
     #[test]
     fn a_non_fissionable_evaluation_is_rejected() {
-        let text = include_str!("../../../tests/photoat-001_H_000.endf");
-        let m = Material::from_str(text).unwrap();
+        const PHOTOAT_H: &[u8] = include_bytes!("../../../tests/photoat-001_H_000.endf.xz");
+        let m = Material::from_str(&crate::testdata::text(PHOTOAT_H)).unwrap();
         assert!(FissionEnergyRelease::from_material(&m, None).is_err());
     }
 }

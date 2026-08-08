@@ -1033,8 +1033,8 @@ pub(crate) fn photon_products_ace(table: &Table, rx: &Reaction) -> Result<Vec<Pr
 mod tests {
     use super::*;
 
-    const AM244: &str = include_str!("../../../tests/n-095_Am_244.endf");
-    const IN115: &str = include_str!("../../../tests/n-049_In-115_trimmed.endf");
+    const AM244: &[u8] = include_bytes!("../../../tests/n-095_Am_244.endf.xz");
+    const IN115: &[u8] = include_bytes!("../../../tests/n-049_In-115_trimmed.endf.xz");
 
     #[test]
     fn names_the_reactions_the_format_names() {
@@ -1086,7 +1086,7 @@ mod tests {
 
     #[test]
     fn gathers_a_fission_reaction_from_its_files() {
-        let m = Material::from_str(AM244).unwrap();
+        let m = Material::from_str(&crate::testdata::text(AM244)).unwrap();
         let rx = Reaction::from_endf(18, &m).unwrap();
         assert_eq!(rx.name().as_deref(), Some("(n,fission)"));
         assert_eq!(rx.xs.keys().collect::<Vec<_>>(), ["0K"]);
@@ -1116,8 +1116,8 @@ mod tests {
 
     #[test]
     fn each_delayed_group_gets_its_own_spectrum_and_share_of_the_yield() {
-        const U235: &str = include_str!("../../../tests/n-092_U_235_trimmed.endf");
-        let m = Material::from_str(U235).unwrap();
+        const U235: &[u8] = include_bytes!("../../../tests/n-092_U_235_trimmed.endf.xz");
+        let m = Material::from_str(&crate::testdata::text(U235)).unwrap();
         let rx = Reaction::from_endf(18, &m).unwrap();
 
         let lambda = &m.mf1_mt455().unwrap().lambda;
@@ -1162,7 +1162,7 @@ mod tests {
 
     #[test]
     fn level_inelastic_scattering_gets_its_kinematics() {
-        let m = Material::from_str(AM244).unwrap();
+        let m = Material::from_str(&crate::testdata::text(AM244)).unwrap();
         let rx = Reaction::from_endf(51, &m).unwrap();
         assert_eq!(rx.name().as_deref(), Some("(n,n1)"));
 
@@ -1186,7 +1186,7 @@ mod tests {
 
     #[test]
     fn an_mf10_production_cross_section_becomes_a_yield() {
-        let m = Material::from_str(IN115).unwrap();
+        let m = Material::from_str(&crate::testdata::text(IN115)).unwrap();
         let rx = Reaction::from_endf(4, &m).unwrap();
 
         // In115 inelastic leaves In115 in its first excited state.
@@ -1218,7 +1218,7 @@ mod tests {
 
     #[test]
     fn a_reaction_with_no_cross_section_is_refused() {
-        let m = Material::from_str(AM244).unwrap();
+        let m = Material::from_str(&crate::testdata::text(AM244)).unwrap();
         assert!(Reaction::from_endf(999, &m).is_err());
     }
 }
@@ -1229,7 +1229,7 @@ mod ace_tests {
     use crate::ace;
 
     fn li6() -> ace::Table {
-        ace::get_tables("../../tests/Li6.ace").unwrap().remove(0)
+        crate::testdata::ace_tables(crate::testdata::LI6_ACE).remove(0)
     }
 
     #[test]

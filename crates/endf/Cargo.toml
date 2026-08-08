@@ -11,3 +11,10 @@ rust-version.workspace = true
 # need Arrow, Python bindings or a simulation-ready projection build those on
 # top rather than paying for them here.
 [dependencies]
+
+# Tests only, and so not a dependency of anything that uses this crate. The
+# fixtures and the golden dumps are stored xz-compressed — an evaluation is
+# highly repetitive and compresses about six to one — and this reads them.
+# Pure Rust, so there is no C toolchain to have.
+[dev-dependencies]
+lzma-rs = "0.3"
