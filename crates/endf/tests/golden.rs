@@ -539,6 +539,23 @@ fn dump_ace_table(d: &mut Dump, path: &str, t: &ace::Table) {
         idx.iter().map(|&i| i as i64).collect(),
     );
     d.floats(format!("{path}/xss_val"), values);
+
+    // The unresolved resonance block, when the table has one.
+    if let Some(urr) = endf::urr::ProbabilityTables::from_ace(t) {
+        d.floats(format!("{path}/urr/energy"), urr.energy.clone());
+        d.ints(
+            format!("{path}/urr/shape"),
+            urr.shape.iter().map(|&v| v as i64).collect(),
+        );
+        d.floats(format!("{path}/urr/table"), urr.table.clone());
+        d.int(format!("{path}/urr/interpolation"), urr.interpolation);
+        d.int(format!("{path}/urr/inelastic_flag"), urr.inelastic_flag);
+        d.int(format!("{path}/urr/absorption_flag"), urr.absorption_flag);
+        d.int(
+            format!("{path}/urr/multiply_smooth"),
+            i64::from(urr.multiply_smooth),
+        );
+    }
 }
 
 fn dump_section(d: &mut Dump, path: &str, section: &Section) {

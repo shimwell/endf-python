@@ -27,6 +27,7 @@ pub mod function;
 pub mod material;
 pub mod mf;
 pub mod records;
+pub mod urr;
 
 pub use data::{gnds_name, zam, EV_PER_MEV, K_BOLTZMANN};
 pub use error::{Error, Result};
@@ -34,3 +35,4 @@ pub use fission_energy::FissionEnergyRelease;
 pub use function::{Polynomial, Tabulated1D, Tabulated2D};
 pub use material::{get_materials, materials_from_str, Material, Section};
 pub use records::{float_endf, int_endf, Cont, Head, ListRecord, Matrix, Reader, Tab1, Tab2};
+pub use urr::ProbabilityTables;

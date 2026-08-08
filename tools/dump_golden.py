@@ -825,6 +825,19 @@ def dump_ace(d: Dump, path: str, table) -> None:
     d.ints(f"{path}/xss_idx", idx)
     d.floats(f"{path}/xss_val", [table.xss[i] for i in idx])
 
+    # The unresolved resonance block, when the table has one.
+    from endf.urr import ProbabilityTables
+
+    urr = ProbabilityTables.from_ace(table)
+    if urr is not None:
+        d.floats(f"{path}/urr/energy", urr.energy)
+        d.ints(f"{path}/urr/shape", urr.table.shape)
+        d.floats(f"{path}/urr/table", urr.table.ravel())
+        d.int(f"{path}/urr/interpolation", urr.interpolation)
+        d.int(f"{path}/urr/inelastic_flag", urr.inelastic_flag)
+        d.int(f"{path}/urr/absorption_flag", urr.absorption_flag)
+        d.int(f"{path}/urr/multiply_smooth", int(urr.multiply_smooth))
+
 
 DUMPERS = {
     1: dump_mf1,
