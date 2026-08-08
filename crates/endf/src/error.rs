@@ -19,6 +19,11 @@ pub enum Error {
     BadNdigit {
         ndigit: i64,
     },
+    /// A representation the reader does not implement, matching where the
+    /// Python reader raises `NotImplementedError`.
+    Unsupported {
+        what: &'static str,
+    },
     Io(std::io::Error),
 }
 
@@ -36,6 +41,9 @@ impl fmt::Display for Error {
             }
             Error::BadNdigit { ndigit } => {
                 write!(f, "INTG record has NDIGIT={ndigit}, expected 2 through 6")
+            }
+            Error::Unsupported { what } => {
+                write!(f, "this reader does not implement {what}")
             }
             Error::Io(e) => write!(f, "{e}"),
         }

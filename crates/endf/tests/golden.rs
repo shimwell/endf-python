@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use endf::mf::mf1::{FissionEnergyRelease, Nu, FISSION_ENERGY_COMPONENTS};
+use endf::mf::mf2::{ResonanceParameters, UnresolvedParameters};
 use endf::{materials_from_str, Material, Section, Tabulated1D, Tabulated2D};
 
 /// Mirrors `MAX_SAMPLES` in `tools/dump_golden.py`.
@@ -150,6 +151,206 @@ fn dump_nu(d: &mut Dump, path: &str, nu: &Nu) {
     }
 }
 
+fn dump_mf2_parameters(d: &mut Dump, rp: &str, p: &ResonanceParameters) {
+    match p {
+        ResonanceParameters::ScatteringRadius { spi, ap, nls } => {
+            d.float(format!("{rp}/SPI"), *spi);
+            d.float(format!("{rp}/AP"), *ap);
+            d.int(format!("{rp}/NLS"), *nls);
+        }
+        ResonanceParameters::BreitWigner(b) => {
+            if let Some(ape) = &b.ape {
+                d.tab1(&format!("{rp}/APE"), ape);
+            }
+            d.float(format!("{rp}/SPI"), b.spi);
+            d.float(format!("{rp}/AP"), b.ap);
+            d.int(format!("{rp}/NLS"), b.nls);
+            for (i, s) in b.sections.iter().enumerate() {
+                let sp = format!("{rp}/sections/{i}");
+                d.float(format!("{sp}/AWRI"), s.awri);
+                d.float(format!("{sp}/QX"), s.qx);
+                d.int(format!("{sp}/L"), s.l);
+                d.int(format!("{sp}/LRX"), s.lrx);
+                d.int(format!("{sp}/NRS"), s.nrs);
+                d.floats(format!("{sp}/ER"), s.er.clone());
+                d.floats(format!("{sp}/AJ"), s.aj.clone());
+                d.floats(format!("{sp}/GT"), s.gt.clone());
+                d.floats(format!("{sp}/GN"), s.gn.clone());
+                d.floats(format!("{sp}/GG"), s.gg.clone());
+                d.floats(format!("{sp}/GF"), s.gf.clone());
+            }
+        }
+        ResonanceParameters::ReichMoore(r) => {
+            if let Some(ape) = &r.ape {
+                d.tab1(&format!("{rp}/APE"), ape);
+            }
+            d.float(format!("{rp}/SPI"), r.spi);
+            d.float(format!("{rp}/AP"), r.ap);
+            d.int(format!("{rp}/LAD"), r.lad);
+            d.int(format!("{rp}/NLS"), r.nls);
+            d.int(format!("{rp}/NLSC"), r.nlsc);
+            for (i, s) in r.sections.iter().enumerate() {
+                let sp = format!("{rp}/sections/{i}");
+                d.float(format!("{sp}/AWRI"), s.awri);
+                d.float(format!("{sp}/APL"), s.apl);
+                d.int(format!("{sp}/L"), s.l);
+                d.int(format!("{sp}/NRS"), s.nrs);
+                d.floats(format!("{sp}/ER"), s.er.clone());
+                d.floats(format!("{sp}/AJ"), s.aj.clone());
+                d.floats(format!("{sp}/GN"), s.gn.clone());
+                d.floats(format!("{sp}/GG"), s.gg.clone());
+                d.floats(format!("{sp}/GFA"), s.gfa.clone());
+                d.floats(format!("{sp}/GFB"), s.gfb.clone());
+            }
+        }
+        ResonanceParameters::RMatrixLimited(r) => {
+            d.int(format!("{rp}/IFG"), r.ifg);
+            d.int(format!("{rp}/KRM"), r.krm);
+            d.int(format!("{rp}/NJS"), r.njs);
+            d.int(format!("{rp}/KRL"), r.krl);
+            d.int(format!("{rp}/NPP"), r.npp);
+            let pp = &r.particle_pairs;
+            for (key, values) in [
+                ("MA", &pp.ma),
+                ("MB", &pp.mb),
+                ("ZA", &pp.za),
+                ("ZB", &pp.zb),
+                ("IA", &pp.ia),
+                ("IB", &pp.ib),
+                ("Q", &pp.q),
+                ("PNT", &pp.pnt),
+                ("SHF", &pp.shf),
+                ("MT", &pp.mt),
+                ("PA", &pp.pa),
+                ("PB", &pp.pb),
+            ] {
+                d.floats(format!("{rp}/particle_pairs/{key}"), values.clone());
+            }
+            for (i, g) in r.spin_groups.iter().enumerate() {
+                let gp = format!("{rp}/spin_groups/{i}");
+                d.float(format!("{gp}/AJ"), g.aj);
+                d.float(format!("{gp}/PJ"), g.pj);
+                d.int(format!("{gp}/KBK"), g.kbk);
+                d.int(format!("{gp}/KPS"), g.kps);
+                d.int(format!("{gp}/NCH"), g.nch);
+                d.int(format!("{gp}/NRS"), g.nrs);
+                d.int(format!("{gp}/NX"), g.nx);
+                let ch = &g.channels;
+                for (key, values) in [
+                    ("PPI", &ch.ppi),
+                    ("L", &ch.l),
+                    ("SCH", &ch.sch),
+                    ("BND", &ch.bnd),
+                    ("APE", &ch.ape),
+                    ("APT", &ch.apt),
+                ] {
+                    d.floats(format!("{gp}/channels/{key}"), values.clone());
+                }
+                d.floats(format!("{gp}/ER"), g.er.clone());
+                for (c, row) in g.gam.iter().enumerate() {
+                    d.floats(format!("{gp}/GAM/{c}"), row.clone());
+                }
+                for (key, value) in [("LCH", g.lch), ("LBK", g.lbk), ("LPS", g.lps)] {
+                    if let Some(v) = value {
+                        d.int(format!("{gp}/{key}"), v);
+                    }
+                }
+                for (key, value) in [("ED", g.ed), ("EU", g.eu)] {
+                    if let Some(v) = value {
+                        d.float(format!("{gp}/{key}"), v);
+                    }
+                }
+                for (key, table) in [
+                    ("RBR", &g.rbr),
+                    ("RBI", &g.rbi),
+                    ("PSR", &g.psr),
+                    ("PSI", &g.psi),
+                ] {
+                    if let Some(t) = table {
+                        d.tab1(&format!("{gp}/{key}"), t);
+                    }
+                }
+            }
+        }
+        ResonanceParameters::Unresolved(u) => {
+            if let Some(ape) = &u.ape {
+                d.tab1(&format!("{rp}/APE"), ape);
+            }
+            d.float(format!("{rp}/SPI"), u.spi);
+            d.float(format!("{rp}/AP"), u.ap);
+            d.int(format!("{rp}/LSSF"), u.lssf);
+            d.int(format!("{rp}/NLS"), u.nls);
+            if let Some(ne) = u.ne {
+                d.int(format!("{rp}/NE"), ne);
+                d.floats(format!("{rp}/ES"), u.es.clone());
+            }
+            for (i, r) in u.ranges.iter().enumerate() {
+                let up = format!("{rp}/ranges/{i}");
+                d.float(format!("{up}/AWRI"), r.awri);
+                d.int(format!("{up}/L"), r.l);
+                d.int(format!("{up}/NJS"), r.njs);
+                if !r.d.is_empty() {
+                    d.floats(format!("{up}/D"), r.d.clone());
+                    d.floats(format!("{up}/AJ"), r.aj.clone());
+                    d.floats(format!("{up}/AMUN"), r.amun.clone());
+                    d.floats(format!("{up}/GNO"), r.gno.clone());
+                    d.floats(format!("{up}/GG"), r.gg.clone());
+                }
+                for (j, p) in r.parameters.iter().enumerate() {
+                    let pp = format!("{up}/parameters/{j}");
+                    match p {
+                        UnresolvedParameters::CaseB {
+                            muf,
+                            d: dd,
+                            aj,
+                            amun,
+                            gn0,
+                            gg,
+                            gf,
+                        } => {
+                            d.int(format!("{pp}/MUF"), *muf);
+                            d.float(format!("{pp}/D"), *dd);
+                            d.float(format!("{pp}/AJ"), *aj);
+                            d.float(format!("{pp}/AMUN"), *amun);
+                            d.float(format!("{pp}/GN0"), *gn0);
+                            d.float(format!("{pp}/GG"), *gg);
+                            d.floats(format!("{pp}/GF"), gf.clone());
+                        }
+                        UnresolvedParameters::CaseC {
+                            aj,
+                            interpolation,
+                            ne,
+                            amux,
+                            amun,
+                            amuf,
+                            e,
+                            d: dd,
+                            gx,
+                            gn0,
+                            gg,
+                            gf,
+                        } => {
+                            d.float(format!("{pp}/AJ"), *aj);
+                            d.int(format!("{pp}/INT"), *interpolation);
+                            d.int(format!("{pp}/NE"), *ne);
+                            d.float(format!("{pp}/AMUX"), *amux);
+                            d.float(format!("{pp}/AMUN"), *amun);
+                            d.float(format!("{pp}/AMUF"), *amuf);
+                            d.floats(format!("{pp}/E"), e.clone());
+                            d.floats(format!("{pp}/D"), dd.clone());
+                            d.floats(format!("{pp}/GX"), gx.clone());
+                            d.floats(format!("{pp}/GN0"), gn0.clone());
+                            d.floats(format!("{pp}/GG"), gg.clone());
+                            d.floats(format!("{pp}/GF"), gf.clone());
+                        }
+                    }
+                }
+            }
+        }
+        ResonanceParameters::Absent => {}
+    }
+}
+
 fn dump_section(d: &mut Dump, path: &str, section: &Section) {
     match section {
         Section::Mf1Mt451(s) => {
@@ -267,6 +468,29 @@ fn dump_section(d: &mut Dump, path: &str, section: &Section) {
             }
             if s.lo == 2 {
                 d.floats(format!("{path}/lambda"), s.lambda.clone());
+            }
+        }
+
+        Section::Mf2(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/NIS"), s.nis);
+            for (a, iso) in s.isotopes.iter().enumerate() {
+                let ip = format!("{path}/isotopes/{a}");
+                d.float(format!("{ip}/ZAI"), iso.zai);
+                d.float(format!("{ip}/ABN"), iso.abn);
+                d.int(format!("{ip}/LFW"), iso.lfw);
+                d.int(format!("{ip}/NER"), iso.ner);
+                for (b, r) in iso.ranges.iter().enumerate() {
+                    let rp = format!("{ip}/ranges/{b}");
+                    d.float(format!("{rp}/EL"), r.el);
+                    d.float(format!("{rp}/EH"), r.eh);
+                    d.int(format!("{rp}/LRU"), r.lru);
+                    d.int(format!("{rp}/LRF"), r.lrf);
+                    d.int(format!("{rp}/NRO"), r.nro);
+                    d.int(format!("{rp}/NAPS"), r.naps);
+                    dump_mf2_parameters(d, &rp, &r.parameters);
+                }
             }
         }
 

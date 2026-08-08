@@ -24,6 +24,8 @@ pub enum Section {
     Mf1Mt458(mf::mf1::Mf1Mt458),
     /// MF=1 MT=460, delayed photon data.
     Mf1Mt460(mf::mf1::Mf1Mt460),
+    /// MF=2 MT=151, resonance parameters.
+    Mf2(Box<mf::mf2::Mf2>),
     /// MF=3, reaction cross sections.
     Mf3(mf::mf3::Mf3),
     Unparsed {
@@ -171,6 +173,14 @@ impl Material {
         }
     }
 
+    /// The MF=2 MT=151 resonance parameters.
+    pub fn mf2(&self) -> Option<&mf::mf2::Mf2> {
+        match self.section_data.get(&(2, 151))? {
+            Section::Mf2(s) => Some(s),
+            _ => None,
+        }
+    }
+
     /// The MF=1 MT=451 descriptive data, which every material carries.
     pub fn mf1_mt451(&self) -> Option<&mf::mf1::Mf1Mt451> {
         match self.section_data.get(&(1, 451))? {
@@ -230,6 +240,7 @@ fn parse_section(mf: i32, mt: i32, text: &str) -> Result<Section> {
         (1, 455) => Section::Mf1Mt455(mf::mf1::parse_mf1_mt455(&mut r)?),
         (1, 458) => Section::Mf1Mt458(mf::mf1::parse_mf1_mt458(&mut r)?),
         (1, 460) => Section::Mf1Mt460(mf::mf1::parse_mf1_mt460(&mut r)?),
+        (2, 151) => Section::Mf2(Box::new(mf::mf2::parse_mf2(&mut r)?)),
         (3, _) => Section::Mf3(mf::mf3::parse_mf3(&mut r)?),
         _ => Section::Unparsed { mf, mt },
     })

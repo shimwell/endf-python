@@ -208,6 +208,105 @@ def dump_mf1(d: Dump, path: str, mt: int, section: dict) -> None:
             d.floats(f"{path}/lambda", section["lambda"])
 
 
+def dump_mf2(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/NIS", section["NIS"])
+    for a, iso in enumerate(section["isotopes"]):
+        ip = f"{path}/isotopes/{a}"
+        d.float(f"{ip}/ZAI", iso["ZAI"])
+        d.float(f"{ip}/ABN", iso["ABN"])
+        d.int(f"{ip}/LFW", iso["LFW"])
+        d.int(f"{ip}/NER", iso["NER"])
+        for b, r in enumerate(iso["ranges"]):
+            rp = f"{ip}/ranges/{b}"
+            d.float(f"{rp}/EL", r["EL"])
+            d.float(f"{rp}/EH", r["EH"])
+            for key in ("LRU", "LRF", "NRO", "NAPS"):
+                d.int(f"{rp}/{key}", r[key])
+            dump_mf2_parameters(d, rp, r)
+
+
+def dump_mf2_parameters(d: Dump, rp: str, r: dict) -> None:
+    """Whatever representation the range turned out to use.
+
+    Driven by which keys are present rather than by LRU/LRF, so that a range
+    the dispatch skips (issue #15) emits nothing and the Rust side, which
+    reproduces the same skip, emits nothing either.
+    """
+    if "APE" in r:
+        d.tab1(f"{rp}/APE", r["APE"])
+    for key in ("SPI", "AP"):
+        if key in r:
+            d.float(f"{rp}/{key}", r[key])
+    for key in ("NLS", "LAD", "NLSC", "LSSF", "IFG", "KRM", "NJS", "KRL", "NPP", "NE"):
+        if key in r:
+            d.int(f"{rp}/{key}", r[key])
+    if "ES" in r:
+        d.floats(f"{rp}/ES", r["ES"])
+
+    # Resolved: Breit-Wigner and Reich-Moore both key off 'sections'.
+    for i, s in enumerate(r.get("sections", [])):
+        sp = f"{rp}/sections/{i}"
+        for key in ("AWRI", "QX", "APL"):
+            if key in s:
+                d.float(f"{sp}/{key}", s[key])
+        for key in ("L", "LRX", "NRS"):
+            if key in s:
+                d.int(f"{sp}/{key}", s[key])
+        for key in ("ER", "AJ", "GT", "GN", "GG", "GF", "GFA", "GFB"):
+            if key in s:
+                d.floats(f"{sp}/{key}", s[key])
+
+    # R-matrix limited.
+    if "particle_pairs" in r:
+        for key, values in r["particle_pairs"].items():
+            d.floats(f"{rp}/particle_pairs/{key}", values)
+    for i, g in enumerate(r.get("spin_groups", [])):
+        gp = f"{rp}/spin_groups/{i}"
+        for key in ("AJ", "PJ"):
+            d.float(f"{gp}/{key}", g[key])
+        for key in ("KBK", "KPS", "NCH", "NRS", "NX", "LCH", "LBK", "LPS"):
+            if key in g:
+                d.int(f"{gp}/{key}", g[key])
+        for key, values in g["channels"].items():
+            d.floats(f"{gp}/channels/{key}", values)
+        d.floats(f"{gp}/ER", g["ER"])
+        for c, row in enumerate(g["GAM"]):
+            d.floats(f"{gp}/GAM/{c}", row)
+        for key in ("ED", "EU"):
+            if key in g:
+                d.float(f"{gp}/{key}", g[key])
+        for key in ("RBR", "RBI", "PSR", "PSI"):
+            if key in g:
+                d.tab1(f"{gp}/{key}", g[key])
+
+    # Unresolved.
+    for i, u in enumerate(r.get("ranges", [])):
+        up = f"{rp}/ranges/{i}"
+        d.float(f"{up}/AWRI", u["AWRI"])
+        d.int(f"{up}/L", u["L"])
+        d.int(f"{up}/NJS", u["NJS"])
+        for key in ("D", "AJ", "AMUN", "GNO", "GG"):
+            if key in u:
+                d.floats(f"{up}/{key}", u[key])
+        for j, p in enumerate(u.get("parameters", [])):
+            pp = f"{up}/parameters/{j}"
+            for key in ("MUF", "INT", "NE"):
+                if key in p:
+                    d.int(f"{pp}/{key}", p[key])
+            for key in ("D", "AJ", "AMUN", "AMUX", "AMUF", "GN0", "GG"):
+                if key in p:
+                    value = p[key]
+                    if hasattr(value, "__len__"):
+                        d.floats(f"{pp}/{key}", value)
+                    else:
+                        d.float(f"{pp}/{key}", value)
+            for key in ("E", "GX", "GF"):
+                if key in p:
+                    d.floats(f"{pp}/{key}", p[key])
+
+
 def dump_mf3(d: Dump, path: str, mt: int, section: dict) -> None:
     d.int(f"{path}/ZA", section["ZA"])
     d.float(f"{path}/AWR", section["AWR"])
@@ -217,7 +316,7 @@ def dump_mf3(d: Dump, path: str, mt: int, section: dict) -> None:
     d.tab1(f"{path}/sigma", section["sigma"])
 
 
-DUMPERS = {1: dump_mf1, 3: dump_mf3}
+DUMPERS = {1: dump_mf1, 2: dump_mf2, 3: dump_mf3}
 
 
 def dump(path: Path, out) -> None:

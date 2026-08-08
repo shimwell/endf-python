@@ -12,4 +12,5 @@
 //! readers can run side by side while the port is checked file by file.
 
 pub mod mf1;
+pub mod mf2;
 pub mod mf3;

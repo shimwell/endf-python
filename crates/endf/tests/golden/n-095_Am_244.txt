@@ -368,6 +368,22 @@ V 0/1/458/EB/poly F 5250745.0 17415.41 -0.075 0.0075 0.0 0.0
 V 0/1/458/ENU/poly F 7058464.0 26123.11 -0.1 0.01 0.0 0.0
 V 0/1/458/ER/poly F 204520700.0 20020790.0 -1.300626 0.6193 0.0 0.0
 V 0/1/458/ET/poly F 211579100.0 20726550.0 -1.400626 0.6814645 0.0 0.0
+V 0/2/151/ZA I 95244
+V 0/2/151/AWR F 241.968
+V 0/2/151/NIS I 1
+V 0/2/151/isotopes/0/ZAI F 95244.0
+V 0/2/151/isotopes/0/ABN F 1.0
+V 0/2/151/isotopes/0/LFW I 0
+V 0/2/151/isotopes/0/NER I 1
+V 0/2/151/isotopes/0/ranges/0/EL F 0.0
+V 0/2/151/isotopes/0/ranges/0/EH F 0.0
+V 0/2/151/isotopes/0/ranges/0/LRU I 0
+V 0/2/151/isotopes/0/ranges/0/LRF I 0
+V 0/2/151/isotopes/0/ranges/0/NRO I 0
+V 0/2/151/isotopes/0/ranges/0/NAPS I 0
+V 0/2/151/isotopes/0/ranges/0/SPI F 6.0
+V 0/2/151/isotopes/0/ranges/0/AP F 0.798866
+V 0/2/151/isotopes/0/ranges/0/NLS I 0
 V 0/3/1/ZA I 95244
 V 0/3/1/AWR F 241.968
 V 0/3/1/QM F 0.0
