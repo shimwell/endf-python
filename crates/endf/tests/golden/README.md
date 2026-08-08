@@ -66,53 +66,48 @@ Trimming a fixture down to the sections that matter is what `tools/trim_endf.py`
 is for. A full evaluation runs to tens of megabytes, most of it covariance
 data — U235 is 36 MB whole and 451 KB with ten sections kept.
 
-The remaining gaps below are what the Arrow conversion depends on, in roughly
-the order it needs them.
+### Fixtures present
 
-### By format feature
+| Fixture | Covers |
+|---|---|
+| `n-095_Am_244` | MF1 (incl. MT458), MF2 LRF=0, MF3, MF4, MF5 LF=7 |
+| `n-095_Am_242_trimmed` | MF1, a metastable target |
+| `n-049_In-115_trimmed` | MF3, MF8, MF9, MF10 — isomer production |
+| `n-054_Xe_136_trimmed` | MF1, MF3 |
+| `n-003_Li_006_trimmed` | MF6 LAW=2 and LAW=4, MF12, MF14, MF33 |
+| `n-026_Fe_056_trimmed` | MF2 Reich-Moore, MF6 LAW=1, MF12/14, MF33 |
+| `n-092_U_235_trimmed` | MF2 Reich-Moore + Case C URR, MF8, MF10, MF15, MF34 |
+| `photoat-001_H_000` | MF23, MF27 |
+| `atom-001_H_000` | MF28 |
+| `e-001_H_000` | MF23, MF26 in all three laws |
+| `tsl-s-CH4` | MF7 MT=2 and MT=4 |
+| `Li6.ace` | An ACE Type 1 table |
 
-- [ ] **MF1** nu-bar in both forms — polynomial (LNU=1) and tabulated (LNU=2);
-      delayed nu and decay constants (MT455); fission energy release (MT458) in
-      both polynomial and tabulated form. U235, U238 and Pu239 carry a tabulated
-      prompt term with a polynomial delayed one in the same evaluation.
-- [ ] **MF2** every resonance formalism: SLBW, MLBW, Reich-Moore, Adler-Adler,
-      R-matrix limited (LRF=7), and unresolved resonances (LRU=2) both
-      energy-dependent and not.
-- [ ] **MF4** LTT=1 Legendre, LTT=2 tabulated, LTT=3 mixed.
-- [ ] **MF5** the energy-distribution laws: LF=1, 5, 7, 9, 11, 12.
-- [ ] **MF6** LAW=1 with LANG=1 (Legendre), LANG=2 (Kalbach-Mann) and LANG=11–15
-      (tabulated), plus LAW=2, 3, 4, 6 (n-body) and 7. These are the four
-      distribution shapes the Arrow `distributions` table has columns for.
-- [ ] **MF7** thermal scattering: MT2 coherent and incoherent elastic, MT4
-      inelastic S(a,b). Needs a `tsl-` file.
-- [ ] **MF8** MT457 decay data, MT454/459 fission yields. Needs `decay-` and
-      `nfy-` sublibrary files — these feed the transmutation tables.
-- [ ] **MF9/MF10** isomer production, which is where isomeric branching ratios
-      come from.
-- [ ] **MF23/MF27** photo-atomic — needs a `photoat-` file. Fe is the one the
-      converter's own tests use.
-- [ ] **MF26/MF28** electro-atomic and atomic relaxation.
-- [ ] **MF33/34/40** covariances, which are the only user of the INTG record.
+### Fixtures still wanted
 
-### By nuclide
-
-- [ ] H1 — trivial, no resonances; the degenerate case.
-- [ ] Li6 — light, with MT=105; already a fixture in the converter.
-- [ ] Fe56 — dense resolved resonances and large covariances.
-- [ ] U235 / U238 / Pu239 — fission, delayed neutrons, yields, energy release.
-- [ ] A metastable target (Am242m) — the `_m1` naming path.
-
-### By library
-
-The same nuclide from each of ENDF/B-VIII.1, JEFF-4.0, JENDL-5 and TENDL-2025.
-Libraries differ in which optional records they write and in how strictly they
-follow the format, and that is exactly what a format reader gets wrong.
+- **MF13 and MF40**, the two parsers nothing exercises. MF13 appears in
+  evaluations that give photon production as a cross section rather than a
+  multiplicity; MF40 needs an evaluation with radionuclide production
+  covariances.
+- **MF6 with LANG=2 (Kalbach-Mann) and LAW=6 (n-body)**. LAW=1/LANG=1, LAW=2 and
+  LAW=4 are covered, but these two are not, and they are among the shapes an
+  Arrow projection needs columns for.
+- **MF2 formalisms other than Reich-Moore**: single-level and multi-level
+  Breit-Wigner, R-matrix limited (LRF=7), and unresolved Cases A and B. Note
+  that Cases A and B cannot be reached at all through the current dispatch —
+  see issue #15 — so a fixture alone will not cover them.
+- **Adler-Adler (LRF=4)**, which both readers reject rather than parse. A
+  fixture would only pin that rejection.
+- **Other libraries.** Everything here is ENDF/B-VIII.0 except the ACE table,
+  which is TENDL-2023.1. JEFF-4.0, JENDL-5 and TENDL-2025 differ in which
+  optional records they write and how strictly they follow the format, which is
+  exactly what a format reader gets wrong.
 
 ## A note on size
 
-Full evaluations with covariances run to tens of megabytes, and a golden file
-that lists every value would be no smaller. Before adding those, the dump format
-should grow a digest record — a hash over a table rather than its values — so
-large evaluations cost a line instead of a megabyte. Small evaluations should
-stay fully enumerated: an exact diff points at the value that broke, a hash only
-says something did.
+Fixtures are trimmed with `tools/trim_endf.py` rather than added whole; a full
+evaluation with covariances runs to tens of megabytes. If one ever has to be
+added whole, the dump format should grow a digest record — a hash over a table
+rather than its values — so that a large evaluation costs a line instead of a
+megabyte. Small fixtures should stay fully enumerated: an exact diff points at
+the value that broke, a hash only says something did.
