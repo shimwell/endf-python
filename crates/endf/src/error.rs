@@ -23,6 +23,14 @@ pub enum Error {
     BadAceTable {
         what: String,
     },
+    /// An interpolation scheme the reader does not know.
+    BadInterpolation {
+        name: String,
+    },
+    /// Two lists that had to be the same length were not.
+    Mismatched {
+        what: &'static str,
+    },
     /// A name that is not a nuclide in GNDS convention.
     BadNuclideName {
         name: String,
@@ -55,6 +63,13 @@ impl fmt::Display for Error {
                 write!(f, "INTG record has NDIGIT={ndigit}, expected 2 through 6")
             }
             Error::BadAceTable { what } => write!(f, "could not read the ACE table: {what}"),
+            Error::BadInterpolation { name } => {
+                write!(
+                    f,
+                    "{name:?} is not an interpolation scheme this reader knows"
+                )
+            }
+            Error::Mismatched { what } => write!(f, "{what} must match"),
             Error::BadNuclideName { name } => {
                 write!(f, "{name:?} is not a nuclide name in GNDS format")
             }

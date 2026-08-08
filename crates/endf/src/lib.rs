@@ -27,6 +27,7 @@ pub mod function;
 pub mod material;
 pub mod mf;
 pub mod records;
+pub mod univariate;
 pub mod urr;
 
 pub use data::{gnds_name, zam, EV_PER_MEV, K_BOLTZMANN};
