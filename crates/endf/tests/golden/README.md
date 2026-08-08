@@ -15,6 +15,12 @@ golden opens with `KIND ace` and the Rust side reads it through
 the dump records a spread across it plus both ends and every JXS entry point,
 which is where a consumer actually looks. Everything else is recorded in full.
 
+On top of the raw arrays, the ACE dump walks the two blocks a transport code
+reads: every locator in AND (the angular distributions) and the whole of DLW
+(the joint angle-energy distributions, following the linked list each reaction
+carries). That turns the ACE fixtures into a check on the interpretation, not
+only on the numbers.
+
 ## Adding an evaluation
 
 1. Drop the file in `tests/data/`.
@@ -62,6 +68,13 @@ single-level and multi-level Breit-Wigner, Adler-Adler, R-matrix limited (LRF=7)
 and unresolved Cases A and B are still untested. Cases A and B are additionally
 unreachable through the current dispatch; see issue #15.
 
+The distribution shapes are tracked the same way, in `DISTRIBUTION_SHAPES`:
+every angular, energy and joint angle-energy shape the dumpers can write has to
+appear in some golden file, or the test names the one that does not. Where no
+real table small enough to keep as a fixture holds a shape, one is built —
+`tools/make_urr_ace.py` and `tools/make_laws_ace.py` write synthetic tables
+whose values are invented but whose layout is the format's.
+
 Trimming a fixture down to the sections that matter is what `tools/trim_endf.py`
 is for. A full evaluation runs to tens of megabytes, most of it covariance
 data — U235 is 36 MB whole and 451 KB with ten sections kept.
@@ -81,7 +94,9 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 | `atom-001_H_000` | MF28 |
 | `e-001_H_000` | MF23, MF26 in all three laws |
 | `tsl-s-CH4` | MF7 MT=2 and MT=4 |
-| `Li6.ace` | An ACE Type 1 table |
+| `Li6.ace` | An ACE Type 1 table; AND in all three shapes, DLW laws 3, 33 and 44 |
+| `synthetic-urr.ace` | The unresolved resonance block, which no small real table has |
+| `synthetic-laws.ace` | DLW laws 2, 4, 7, 9, 11, 61 and 66 |
 
 ### Fixtures still wanted
 
@@ -98,6 +113,10 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
   see issue #15 — so a fixture alone will not cover them.
 - **Adler-Adler (LRF=4)**, which both readers reject rather than parse. A
   fixture would only pin that rejection.
+- **MF5 LF=5 (general evaporation) and LF=12 (Madland-Nix)**. LF=1, LF=7 and
+  LF=9 are covered by Li6 and Am244; the other two ENDF laws have no fixture.
+  Both are parsed and neither is verified. The ACE side is complete apart from
+  law 5, which the Python reader cannot read at all — see issue #19.
 - **Other libraries.** Everything here is ENDF/B-VIII.0 except the ACE table,
   which is TENDL-2023.1. JEFF-4.0, JENDL-5 and TENDL-2025 differ in which
   optional records they write and how strictly they follow the format, which is

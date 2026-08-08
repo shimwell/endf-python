@@ -373,7 +373,6 @@ def dump_angle_distribution(d: Dump, path: str, dist) -> None:
     from numpy.polynomial import Legendre
 
     from endf.function import Tabulated1D
-    from endf.univariate import Tabular, Uniform
 
     d.floats(f"{path}/energy", dist.energy)
     d.int(f"{path}/n_mu", len(dist.mu))
@@ -385,20 +384,148 @@ def dump_angle_distribution(d: Dump, path: str, dist) -> None:
         elif isinstance(mu, Tabulated1D):
             d.text(f"{p}/kind", "tabulated")
             d.tab1(f"{p}/f", mu)
-        elif isinstance(mu, Tabular):
-            d.text(f"{p}/kind", "tabular")
-            d.text(f"{p}/interpolation", mu.interpolation)
-            d.floats(f"{p}/x", mu.x)
-            d.floats(f"{p}/p", mu.p)
-            if mu.c is not None:
-                d.floats(f"{p}/c", mu.c)
-            d.floats(f"{p}/cdf", mu.cdf())
-        elif isinstance(mu, Uniform):
-            d.text(f"{p}/kind", "uniform")
-            d.float(f"{p}/a", mu.a)
-            d.float(f"{p}/b", mu.b)
         else:
-            raise TypeError(f"unexpected angle distribution {type(mu)}")
+            dump_univariate(d, p, mu)
+
+
+def dump_univariate(d: Dump, p: str, u) -> None:
+    """One :class:`endf.univariate.Univariate`, whichever shape it is."""
+    from endf.univariate import Discrete, Mixture, Tabular, Uniform
+
+    if isinstance(u, Discrete):
+        d.text(f"{p}/kind", "discrete")
+        d.floats(f"{p}/x", u.x)
+        d.floats(f"{p}/p", u.p)
+        d.floats(f"{p}/cdf", u.cdf())
+    elif isinstance(u, Tabular):
+        d.text(f"{p}/kind", "tabular")
+        d.text(f"{p}/interpolation", u.interpolation)
+        d.floats(f"{p}/x", u.x)
+        d.floats(f"{p}/p", u.p)
+        d.floats(f"{p}/cdf", u.cdf())
+    elif isinstance(u, Uniform):
+        d.text(f"{p}/kind", "uniform")
+        d.float(f"{p}/a", u.a)
+        d.float(f"{p}/b", u.b)
+    elif isinstance(u, Mixture):
+        d.text(f"{p}/kind", "mixture")
+        d.floats(f"{p}/probability", u.probability)
+        for j, sub in enumerate(u.distribution):
+            dump_univariate(d, f"{p}/distribution/{j}", sub)
+    else:
+        raise TypeError(f"unexpected distribution {type(u)}")
+
+    # The CDF as the file gave it, where there was one.
+    if getattr(u, "c", None) is not None:
+        d.floats(f"{p}/c", u.c)
+
+
+def dump_energy_distribution(d: Dump, p: str, dist) -> None:
+    """One energy distribution object, of whichever law."""
+    from endf.mf5 import (
+        ArbitraryTabulated,
+        ContinuousTabular,
+        DiscretePhoton,
+        Evaporation,
+        GeneralEvaporation,
+        LevelInelastic,
+        MadlandNix,
+        MaxwellEnergy,
+        WattEnergy,
+    )
+
+    if isinstance(dist, ArbitraryTabulated):
+        d.text(f"{p}/kind", "arbitrary-tabulated")
+        d.floats(f"{p}/E", dist.energy)
+        for j, g in enumerate(dist.pdf):
+            d.tab1(f"{p}/g/{j}", g)
+    elif isinstance(dist, GeneralEvaporation):
+        d.text(f"{p}/kind", "general-evaporation")
+        d.float(f"{p}/U", dist.u)
+        d.tab1(f"{p}/theta", dist.theta)
+        d.tab1(f"{p}/g", dist.g)
+    elif isinstance(dist, MaxwellEnergy):
+        d.text(f"{p}/kind", "maxwell")
+        d.float(f"{p}/U", dist.u)
+        d.tab1(f"{p}/theta", dist.theta)
+    elif isinstance(dist, Evaporation):
+        d.text(f"{p}/kind", "evaporation")
+        d.float(f"{p}/U", dist.u)
+        d.tab1(f"{p}/theta", dist.theta)
+    elif isinstance(dist, WattEnergy):
+        d.text(f"{p}/kind", "watt")
+        d.float(f"{p}/U", dist.u)
+        d.tab1(f"{p}/a", dist.a)
+        d.tab1(f"{p}/b", dist.b)
+    elif isinstance(dist, MadlandNix):
+        d.text(f"{p}/kind", "madland-nix")
+        d.float(f"{p}/EFL", dist.efl)
+        d.float(f"{p}/EFH", dist.efh)
+        d.tab1(f"{p}/T_M", dist.t_m)
+    elif isinstance(dist, LevelInelastic):
+        d.text(f"{p}/kind", "level-inelastic")
+        d.float(f"{p}/threshold", dist.threshold)
+        d.float(f"{p}/mass_ratio", dist.mass_ratio)
+    elif isinstance(dist, DiscretePhoton):
+        d.text(f"{p}/kind", "discrete-photon")
+        d.int(f"{p}/primary_flag", dist.primary_flag)
+        d.float(f"{p}/energy", dist.energy)
+        d.float(f"{p}/atomic_weight_ratio", dist.atomic_weight_ratio)
+    elif isinstance(dist, ContinuousTabular):
+        d.text(f"{p}/kind", "continuous-tabular")
+        d.ints(f"{p}/bp", dist.breakpoints)
+        d.ints(f"{p}/int", dist.interpolation)
+        d.floats(f"{p}/E", dist.energy)
+        for j, eout in enumerate(dist.energy_out):
+            dump_univariate(d, f"{p}/energy_out/{j}", eout)
+    else:
+        raise TypeError(f"unexpected energy distribution {type(dist)}")
+
+
+def dump_angle_energy(d: Dump, p: str, ae) -> None:
+    """One joint angle-energy distribution, of whichever shape."""
+    from endf.angle_energy import (
+        CorrelatedAngleEnergy,
+        KalbachMann,
+        NBodyPhaseSpace,
+        UncorrelatedAngleEnergy,
+    )
+
+    if isinstance(ae, UncorrelatedAngleEnergy):
+        d.text(f"{p}/kind", "uncorrelated")
+        if ae.angle is not None:
+            dump_angle_distribution(d, f"{p}/angle", ae.angle)
+        if ae.energy is not None:
+            dump_energy_distribution(d, f"{p}/energy", ae.energy)
+    elif isinstance(ae, KalbachMann):
+        d.text(f"{p}/kind", "kalbach-mann")
+        d.ints(f"{p}/bp", ae.breakpoints)
+        d.ints(f"{p}/int", ae.interpolation)
+        d.floats(f"{p}/E", ae.energy)
+        for j, eout in enumerate(ae.energy_out):
+            dump_univariate(d, f"{p}/energy_out/{j}", eout)
+        for j, r in enumerate(ae.precompound):
+            d.tab1(f"{p}/precompound/{j}", r)
+        for j, a in enumerate(ae.slope):
+            d.tab1(f"{p}/slope/{j}", a)
+    elif isinstance(ae, CorrelatedAngleEnergy):
+        d.text(f"{p}/kind", "correlated")
+        d.ints(f"{p}/bp", ae.breakpoints)
+        d.ints(f"{p}/int", ae.interpolation)
+        d.floats(f"{p}/E", ae.energy)
+        for j, eout in enumerate(ae.energy_out):
+            dump_univariate(d, f"{p}/energy_out/{j}", eout)
+        for j, mu_j in enumerate(ae.mu):
+            for k, mu_jk in enumerate(mu_j):
+                dump_univariate(d, f"{p}/mu/{j}/{k}", mu_jk)
+    elif isinstance(ae, NBodyPhaseSpace):
+        d.text(f"{p}/kind", "nbody")
+        d.float(f"{p}/total_mass", ae.total_mass)
+        d.int(f"{p}/n_particles", ae.n_particles)
+        d.float(f"{p}/atomic_weight_ratio", ae.atomic_weight_ratio)
+        d.float(f"{p}/q_value", ae.q_value)
+    else:
+        raise TypeError(f"unexpected angle-energy distribution {type(ae)}")
 
 
 def dump_mf5(d: Dump, path: str, mt: int, section: dict) -> None:
@@ -882,6 +1009,48 @@ def dump_ace_angle(d: Dump, path: str, table) -> None:
         dump_angle_distribution(d, f"{path}/{i}", dist)
 
 
+def dump_ace_dlw(d: Dump, path: str, table) -> None:
+    """Every angle-energy distribution an ACE neutron table holds.
+
+    LDLW (JXS(10)) gives one locator per reaction that emits a neutron, and
+    the DLW block (JXS(11)) holds the distributions. A reaction may have
+    several, chained: each entry's first word points at the next one, and the
+    fourth begins the applicability of the one it introduces.
+    """
+    from types import SimpleNamespace
+
+    from endf.ace import TableType
+    from endf.angle_energy import AngleEnergy
+    from endf.function import Tabulated1D
+
+    if table.data_type != TableType.NEUTRON_CONTINUOUS:
+        return
+    ldlw, dlw = int(table.jxs[10]), int(table.jxs[11])
+    if ldlw <= 0:
+        return
+
+    # Law 66 wants the reaction's Q value. Reactions are not read here, so a
+    # fixed value stands in; both readers are given the same one, which leaves
+    # every other field of the law under test.
+    rx = SimpleNamespace(q_reaction=0.0)
+
+    n = int(table.nxs[5])
+    d.int(f"{path}/n", n)
+    for i_reaction in range(1, n + 1):
+        rp = f"{path}/{i_reaction}"
+        lnw = int(table.xss[ldlw + i_reaction - 1])
+        chain = []
+        while lnw > 0:
+            k = len(chain)
+            chain.append(lnw)
+            d.tab1(
+                f"{rp}/{k}/applicability", Tabulated1D.from_ace(table, dlw + lnw + 2)
+            )
+            dump_angle_energy(d, f"{rp}/{k}", AngleEnergy.from_ace(table, dlw, lnw, rx))
+            lnw = int(table.xss[dlw + lnw - 1])
+        d.ints(f"{rp}/chain", chain)
+
+
 def dump_ace(d: Dump, path: str, table) -> None:
     d.text(f"{path}/name", table.name)
     d.float(f"{path}/atomic_weight_ratio", table.atomic_weight_ratio)
@@ -900,6 +1069,7 @@ def dump_ace(d: Dump, path: str, table) -> None:
     d.floats(f"{path}/xss_val", [table.xss[i] for i in idx])
 
     dump_ace_angle(d, f"{path}/and", table)
+    dump_ace_dlw(d, f"{path}/dlw", table)
 
     # The unresolved resonance block, when the table has one.
     from endf.urr import ProbabilityTables

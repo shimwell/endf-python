@@ -20,6 +20,7 @@
 #![forbid(unsafe_code)]
 
 pub mod ace;
+pub mod angle_energy;
 pub mod data;
 pub mod error;
 pub mod fission_energy;
@@ -30,6 +31,9 @@ pub mod records;
 pub mod univariate;
 pub mod urr;
 
+pub use angle_energy::{
+    AngleEnergy, CorrelatedAngleEnergy, KalbachMann, NBodyPhaseSpace, UncorrelatedAngleEnergy,
+};
 pub use data::{gnds_name, zam, EV_PER_MEV, K_BOLTZMANN};
 pub use error::{Error, Result};
 pub use fission_energy::FissionEnergyRelease;

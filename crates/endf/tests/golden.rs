@@ -27,6 +27,8 @@ use endf::mf::mf2::{ResonanceParameters, UnresolvedParameters};
 use endf::mf::mf4::{AngleAtEnergy, AngleDistribution};
 use endf::mf::mf5::EnergyDistribution;
 use endf::mf::mf6::Distribution as Mf6Distribution;
+use endf::univariate::Univariate;
+use endf::AngleEnergy;
 use endf::{materials_from_str, Material, Section, Tabulated1D, Tabulated2D};
 
 /// Mirrors `MAX_SAMPLES` in `tools/dump_golden.py`.
@@ -511,21 +513,227 @@ fn dump_angle_distribution(d: &mut Dump, path: &str, dist: &AngleDistribution) {
                 d.tab1(&format!("{p}/f"), f);
             }
             AngleAtEnergy::Tabular(t) => {
-                d.text(format!("{p}/kind"), "tabular");
-                d.text(format!("{p}/interpolation"), t.interpolation.name());
-                d.floats(format!("{p}/x"), t.x.clone());
-                d.floats(format!("{p}/p"), t.p.clone());
-                if let Some(c) = &t.c {
-                    d.floats(format!("{p}/c"), c.clone());
-                }
-                d.floats(format!("{p}/cdf"), t.cdf());
+                dump_univariate(d, &p, &Univariate::Tabular(t.clone()));
             }
             AngleAtEnergy::Isotropic(u) => {
-                d.text(format!("{p}/kind"), "uniform");
-                d.float(format!("{p}/a"), u.a);
-                d.float(format!("{p}/b"), u.b);
+                dump_univariate(d, &p, &Univariate::Uniform(u.clone()));
             }
         }
+    }
+}
+
+/// Mirrors `dump_univariate` in `tools/dump_golden.py`.
+fn dump_univariate(d: &mut Dump, p: &str, u: &Univariate) {
+    let c = match u {
+        Univariate::Discrete(t) => {
+            d.text(format!("{p}/kind"), "discrete");
+            d.floats(format!("{p}/x"), t.x.clone());
+            d.floats(format!("{p}/p"), t.p.clone());
+            d.floats(format!("{p}/cdf"), t.cdf());
+            &t.c
+        }
+        Univariate::Tabular(t) => {
+            d.text(format!("{p}/kind"), "tabular");
+            d.text(format!("{p}/interpolation"), t.interpolation.name());
+            d.floats(format!("{p}/x"), t.x.clone());
+            d.floats(format!("{p}/p"), t.p.clone());
+            d.floats(format!("{p}/cdf"), t.cdf());
+            &t.c
+        }
+        Univariate::Uniform(t) => {
+            d.text(format!("{p}/kind"), "uniform");
+            d.float(format!("{p}/a"), t.a);
+            d.float(format!("{p}/b"), t.b);
+            &None
+        }
+        Univariate::Mixture(m) => {
+            d.text(format!("{p}/kind"), "mixture");
+            d.floats(format!("{p}/probability"), m.probability.clone());
+            for (j, sub) in m.distribution.iter().enumerate() {
+                dump_univariate(d, &format!("{p}/distribution/{j}"), sub);
+            }
+            &None
+        }
+    };
+    // The CDF as the file gave it, where there was one.
+    if let Some(c) = c {
+        d.floats(format!("{p}/c"), c.clone());
+    }
+}
+
+/// Mirrors `dump_energy_distribution` in `tools/dump_golden.py`.
+fn dump_energy_distribution(d: &mut Dump, p: &str, dist: &EnergyDistribution) {
+    match dist {
+        EnergyDistribution::ArbitraryTabulated { energy, g, .. } => {
+            d.text(format!("{p}/kind"), "arbitrary-tabulated");
+            d.floats(format!("{p}/E"), energy.clone());
+            for (j, t) in g.iter().enumerate() {
+                d.tab1(&format!("{p}/g/{j}"), t);
+            }
+        }
+        EnergyDistribution::GeneralEvaporation { u, theta, g } => {
+            d.text(format!("{p}/kind"), "general-evaporation");
+            d.float(format!("{p}/U"), *u);
+            d.tab1(&format!("{p}/theta"), theta);
+            d.tab1(&format!("{p}/g"), g);
+        }
+        EnergyDistribution::MaxwellEnergy { u, theta } => {
+            d.text(format!("{p}/kind"), "maxwell");
+            d.float(format!("{p}/U"), *u);
+            d.tab1(&format!("{p}/theta"), theta);
+        }
+        EnergyDistribution::Evaporation { u, theta } => {
+            d.text(format!("{p}/kind"), "evaporation");
+            d.float(format!("{p}/U"), *u);
+            d.tab1(&format!("{p}/theta"), theta);
+        }
+        EnergyDistribution::WattEnergy { u, a, b } => {
+            d.text(format!("{p}/kind"), "watt");
+            d.float(format!("{p}/U"), *u);
+            d.tab1(&format!("{p}/a"), a);
+            d.tab1(&format!("{p}/b"), b);
+        }
+        EnergyDistribution::MadlandNix { efl, efh, t_m } => {
+            d.text(format!("{p}/kind"), "madland-nix");
+            d.float(format!("{p}/EFL"), *efl);
+            d.float(format!("{p}/EFH"), *efh);
+            d.tab1(&format!("{p}/T_M"), t_m);
+        }
+        EnergyDistribution::LevelInelastic {
+            threshold,
+            mass_ratio,
+        } => {
+            d.text(format!("{p}/kind"), "level-inelastic");
+            d.float(format!("{p}/threshold"), *threshold);
+            d.float(format!("{p}/mass_ratio"), *mass_ratio);
+        }
+        EnergyDistribution::DiscretePhoton {
+            primary_flag,
+            energy,
+            atomic_weight_ratio,
+        } => {
+            d.text(format!("{p}/kind"), "discrete-photon");
+            d.int(format!("{p}/primary_flag"), *primary_flag);
+            d.float(format!("{p}/energy"), *energy);
+            d.float(format!("{p}/atomic_weight_ratio"), *atomic_weight_ratio);
+        }
+        EnergyDistribution::ContinuousTabular {
+            breakpoints,
+            interpolation,
+            energy,
+            energy_out,
+        } => {
+            d.text(format!("{p}/kind"), "continuous-tabular");
+            d.ints(
+                format!("{p}/bp"),
+                breakpoints.iter().map(|&v| v as i64).collect(),
+            );
+            d.ints(
+                format!("{p}/int"),
+                interpolation.iter().map(|&v| v as i64).collect(),
+            );
+            d.floats(format!("{p}/E"), energy.clone());
+            for (j, eout) in energy_out.iter().enumerate() {
+                dump_univariate(d, &format!("{p}/energy_out/{j}"), eout);
+            }
+        }
+    }
+}
+
+/// Mirrors `dump_angle_energy` in `tools/dump_golden.py`.
+fn dump_angle_energy(d: &mut Dump, p: &str, ae: &AngleEnergy) {
+    match ae {
+        AngleEnergy::Uncorrelated(u) => {
+            d.text(format!("{p}/kind"), "uncorrelated");
+            if let Some(angle) = &u.angle {
+                dump_angle_distribution(d, &format!("{p}/angle"), angle);
+            }
+            if let Some(energy) = &u.energy {
+                dump_energy_distribution(d, &format!("{p}/energy"), energy);
+            }
+        }
+        AngleEnergy::KalbachMann(k) => {
+            d.text(format!("{p}/kind"), "kalbach-mann");
+            d.ints(
+                format!("{p}/bp"),
+                k.breakpoints.iter().map(|&v| v as i64).collect(),
+            );
+            d.ints(
+                format!("{p}/int"),
+                k.interpolation.iter().map(|&v| v as i64).collect(),
+            );
+            d.floats(format!("{p}/E"), k.energy.clone());
+            for (j, eout) in k.energy_out.iter().enumerate() {
+                dump_univariate(d, &format!("{p}/energy_out/{j}"), eout);
+            }
+            for (j, r) in k.precompound.iter().enumerate() {
+                d.tab1(&format!("{p}/precompound/{j}"), r);
+            }
+            for (j, a) in k.slope.iter().enumerate() {
+                d.tab1(&format!("{p}/slope/{j}"), a);
+            }
+        }
+        AngleEnergy::Correlated(c) => {
+            d.text(format!("{p}/kind"), "correlated");
+            d.ints(
+                format!("{p}/bp"),
+                c.breakpoints.iter().map(|&v| v as i64).collect(),
+            );
+            d.ints(
+                format!("{p}/int"),
+                c.interpolation.iter().map(|&v| v as i64).collect(),
+            );
+            d.floats(format!("{p}/E"), c.energy.clone());
+            for (j, eout) in c.energy_out.iter().enumerate() {
+                dump_univariate(d, &format!("{p}/energy_out/{j}"), eout);
+            }
+            for (j, mu_j) in c.mu.iter().enumerate() {
+                for (k, mu_jk) in mu_j.iter().enumerate() {
+                    dump_univariate(d, &format!("{p}/mu/{j}/{k}"), mu_jk);
+                }
+            }
+        }
+        AngleEnergy::NBodyPhaseSpace(n) => {
+            d.text(format!("{p}/kind"), "nbody");
+            d.float(format!("{p}/total_mass"), n.total_mass);
+            d.int(format!("{p}/n_particles"), n.n_particles);
+            d.float(format!("{p}/atomic_weight_ratio"), n.atomic_weight_ratio);
+            d.float(format!("{p}/q_value"), n.q_value);
+        }
+    }
+}
+
+/// Mirrors `dump_ace_dlw` in `tools/dump_golden.py`.
+fn dump_ace_dlw(d: &mut Dump, path: &str, t: &ace::Table) {
+    if t.data_type().ok() != Some(ace::TableType::NeutronContinuous) {
+        return;
+    }
+    let (ldlw, dlw) = (t.jxs[10], t.jxs[11]);
+    if ldlw <= 0 {
+        return;
+    }
+    let at = |i: i64| t.xss.get(i as usize).copied().unwrap_or(0.0);
+
+    let n = t.nxs[5];
+    d.int(format!("{path}/n"), n);
+    for i_reaction in 1..=n {
+        let rp = format!("{path}/{i_reaction}");
+        let mut lnw = at(ldlw + i_reaction - 1) as i64;
+        let mut chain: Vec<i64> = Vec::new();
+        while lnw > 0 {
+            let k = chain.len();
+            chain.push(lnw);
+            d.tab1(
+                &format!("{rp}/{k}/applicability"),
+                &Tabulated1D::from_ace(&t.xss, (dlw + lnw + 2).max(0) as usize, true),
+            );
+            // Law 66 wants the reaction's Q value; the Python dumper passes a
+            // fixed stand-in, so this passes the same one.
+            let ae = AngleEnergy::from_ace(t, dlw, lnw, Some(0.0)).unwrap();
+            dump_angle_energy(d, &format!("{rp}/{k}"), &ae);
+            lnw = at(dlw + lnw - 1) as i64;
+        }
+        d.ints(format!("{rp}/chain"), chain);
     }
 }
 
@@ -599,6 +807,7 @@ fn dump_ace_table(d: &mut Dump, path: &str, t: &ace::Table) {
     d.floats(format!("{path}/xss_val"), values);
 
     dump_ace_angle(d, &format!("{path}/and"), t);
+    dump_ace_dlw(d, &format!("{path}/dlw"), t);
 
     // The unresolved resonance block, when the table has one.
     if let Some(urr) = endf::urr::ProbabilityTables::from_ace(t) {
@@ -848,6 +1057,10 @@ fn dump_section(d: &mut Dump, path: &str, section: &Section) {
                         d.float(format!("{dp}/EFH"), *efh);
                         d.tab1(&format!("{dp}/T_M"), t_m);
                     }
+                    // The remaining three have no ENDF law and can only come
+                    // from an ACE table, where `dump_energy_distribution`
+                    // handles them.
+                    other => unreachable!("{dp}: {other:?} is not an ENDF law"),
                 }
             }
         }
@@ -1623,6 +1836,81 @@ fn the_uncovered_parser_list_is_accurate() {
         "the list of parsers no fixture exercises has changed. If a fixture now \
          covers one of these, delete it from UNCOVERED_BY_ANY_FIXTURE; if a new \
          parser has no coverage, add it."
+    );
+}
+
+/// Every distribution shape the object dumpers can write.
+///
+/// Three ENDF laws are missing on purpose. LF=1, LF=5 and LF=12 reach the
+/// golden files through the MF=5 section dump, which is driven by the Python
+/// reader's dictionaries and writes no `kind` line, so this scan cannot see
+/// them. Their fixture coverage is tracked in `golden/README.md` instead.
+///
+/// ACE law 5 is missing for a different reason: the Python reader has no
+/// `from_ace` for the general evaporation spectrum and dies with an
+/// AttributeError, so there is nothing to compare against (issue #19). The
+/// Rust reader refuses that law by name.
+const DISTRIBUTION_SHAPES: [&str; 16] = [
+    // Univariate shapes.
+    "discrete",
+    "tabular",
+    "uniform",
+    "mixture",
+    // Angular distribution shapes, from ENDF.
+    "legendre",
+    "tabulated",
+    // Energy distribution laws an ACE table can carry.
+    "maxwell",
+    "evaporation",
+    "watt",
+    "level-inelastic",
+    "discrete-photon",
+    "continuous-tabular",
+    // Joint angle-energy shapes.
+    "uncorrelated",
+    "kalbach-mann",
+    "correlated",
+    "nbody",
+];
+
+/// Every distribution shape is reached by some fixture.
+///
+/// The golden files are the evidence: a shape that no fixture produces leaves
+/// no `kind` line, and this says which one rather than the gap going unnoticed.
+#[test]
+fn every_distribution_shape_has_a_fixture() {
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for entry in std::fs::read_dir(repo_root().join("crates/endf/tests/golden")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "txt") {
+            continue;
+        }
+        for line in std::fs::read_to_string(&path).unwrap().lines() {
+            // `V <path>/kind T <hex>`
+            let mut parts = line.split_whitespace();
+            let (Some("V"), Some(p), Some("T"), Some(hex)) =
+                (parts.next(), parts.next(), parts.next(), parts.next())
+            else {
+                continue;
+            };
+            if !p.ends_with("/kind") {
+                continue;
+            }
+            let bytes: Vec<u8> = (0..hex.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+                .collect();
+            seen.insert(String::from_utf8(bytes).unwrap());
+        }
+    }
+
+    let missing: Vec<&&str> = DISTRIBUTION_SHAPES
+        .iter()
+        .filter(|s| !seen.contains(**s))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "no fixture produces these distribution shapes: {missing:?}"
     );
 }
 
