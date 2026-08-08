@@ -19,6 +19,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use endf::mf::atomic::ElectroAtomicDistribution;
 use endf::mf::mf1::{FissionEnergyRelease, Nu, FISSION_ENERGY_COMPONENTS};
 use endf::mf::mf2::{ResonanceParameters, UnresolvedParameters};
 use endf::mf::mf5::EnergyDistribution;
@@ -879,6 +880,170 @@ fn dump_section(d: &mut Dump, path: &str, section: &Section) {
             }
         }
 
+        Section::Mf12(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/LO"), s.lo);
+            d.int(format!("{path}/NK"), s.nk);
+            if let Some(y) = &s.total_yield {
+                d.tab1(&format!("{path}/Y"), y);
+            }
+            for (i, k) in s.multiplicities.iter().enumerate() {
+                let kp = format!("{path}/multiplicities/{i}");
+                d.float(format!("{kp}/Eg"), k.eg);
+                d.float(format!("{kp}/ES"), k.es);
+                d.int(format!("{kp}/LP"), k.lp);
+                d.int(format!("{kp}/LF"), k.lf);
+                d.tab1(&format!("{kp}/y"), &k.y);
+            }
+            if let Some(lg) = s.lg {
+                d.int(format!("{path}/LG"), lg);
+                d.float(format!("{path}/ES_NS"), s.es_ns);
+                d.int(format!("{path}/LP"), s.lp);
+                d.int(format!("{path}/NT"), s.nt);
+                for (i, t) in s.transitions.iter().enumerate() {
+                    let tp = format!("{path}/transitions/{i}");
+                    d.float(format!("{tp}/ES"), t.es);
+                    d.float(format!("{tp}/TP"), t.tp);
+                    if let Some(gp) = t.gp {
+                        d.float(format!("{tp}/GP"), gp);
+                    }
+                }
+            }
+        }
+
+        Section::Mf13(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/NK"), s.nk);
+            if let Some(t) = &s.sigma_total {
+                d.tab1(&format!("{path}/sigma_total"), t);
+            }
+            for (i, p) in s.photons.iter().enumerate() {
+                let pp = format!("{path}/photons/{i}");
+                d.float(format!("{pp}/EG"), p.eg);
+                d.float(format!("{pp}/ES"), p.es);
+                d.int(format!("{pp}/LP"), p.lp);
+                d.int(format!("{pp}/LF"), p.lf);
+                d.tab1(&format!("{pp}/sigma"), &p.sigma);
+            }
+        }
+
+        Section::Mf14(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/LI"), s.li);
+            d.int(format!("{path}/NK"), s.nk);
+            if let (Some(ltt), Some(ni)) = (s.ltt, s.ni) {
+                d.int(format!("{path}/LTT"), ltt);
+                d.int(format!("{path}/NI"), ni);
+            }
+            for (i, sub) in s.subsections.iter().enumerate() {
+                let sp = format!("{path}/subsections/{i}");
+                d.float(format!("{sp}/EG"), sub.eg);
+                d.float(format!("{sp}/ES"), sub.es);
+                if let Some(e_int) = &sub.e_int {
+                    d.tab2(&format!("{sp}/E_int"), e_int);
+                    d.int(format!("{sp}/NE"), sub.ne);
+                    d.floats(format!("{sp}/E"), sub.energy.clone());
+                }
+                if !sub.nl.is_empty() {
+                    d.floats(format!("{sp}/NL"), sub.nl.clone());
+                }
+                for (j, a) in sub.a_lk.iter().enumerate() {
+                    d.floats(format!("{sp}/a_lk/{j}"), a.clone());
+                }
+                for (j, p) in sub.p_k.iter().enumerate() {
+                    d.tab1(&format!("{sp}/p_k/{j}"), p);
+                }
+            }
+        }
+
+        Section::Mf15(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/NC"), s.nc);
+            for (i, sub) in s.subsections.iter().enumerate() {
+                let sp = format!("{path}/subsections/{i}");
+                d.int(format!("{sp}/LF"), sub.lf);
+                d.tab1(&format!("{sp}/p"), &sub.p);
+                d.tab2(&format!("{sp}/E_int"), &sub.e_int);
+                d.int(format!("{sp}/NE"), sub.ne);
+                d.floats(format!("{sp}/E"), sub.energy.clone());
+                for (j, g) in sub.g.iter().enumerate() {
+                    d.tab1(&format!("{sp}/g/{j}"), g);
+                }
+            }
+        }
+
+        Section::Mf23(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.float(format!("{path}/EPE"), s.epe);
+            d.float(format!("{path}/EFL"), s.efl);
+            d.tab1(&format!("{path}/sigma"), &s.sigma);
+        }
+
+        Section::Mf26(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/NK"), s.nk);
+            for (i, p) in s.products.iter().enumerate() {
+                let pp = format!("{path}/products/{i}");
+                d.int(format!("{pp}/ZAP"), p.zap);
+                d.float(format!("{pp}/AWI"), p.awi);
+                d.int(format!("{pp}/LAW"), p.law);
+                d.tab1(&format!("{pp}/y"), &p.yield_);
+                let dp = format!("{pp}/distribution");
+                match &p.distribution {
+                    ElectroAtomicDistribution::None => {}
+                    ElectroAtomicDistribution::EnergyTransfer(t) => d.tab1(&format!("{dp}/ET"), t),
+                    ElectroAtomicDistribution::ContinuumEnergyAngle(c) => {
+                        dump_mf6_distribution(
+                            d,
+                            &dp,
+                            &Mf6Distribution::ContinuumEnergyAngle((**c).clone()),
+                        );
+                    }
+                    ElectroAtomicDistribution::DiscreteTwoBody(t) => {
+                        dump_mf6_distribution(
+                            d,
+                            &dp,
+                            &Mf6Distribution::DiscreteTwoBody((**t).clone()),
+                        );
+                    }
+                }
+            }
+        }
+
+        Section::Mf27(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.float(format!("{path}/Z"), s.z);
+            d.tab1(&format!("{path}/H"), &s.h);
+        }
+
+        Section::Mf28(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/NSS"), s.nss);
+            for (i, sh) in s.shells.iter().enumerate() {
+                let sp = format!("{path}/shells/{i}");
+                d.float(format!("{sp}/SUBI"), sh.subi);
+                d.int(format!("{sp}/NTR"), sh.ntr);
+                d.float(format!("{sp}/EBI"), sh.ebi);
+                d.float(format!("{sp}/ELN"), sh.eln);
+                for (key, values) in [
+                    ("SUBJ", &sh.subj),
+                    ("SUBK", &sh.subk),
+                    ("ETR", &sh.etr),
+                    ("FTR", &sh.ftr),
+                ] {
+                    d.floats(format!("{sp}/{key}"), values.clone());
+                }
+            }
+        }
+
         Section::Unparsed { .. } => {}
     }
 }
@@ -1080,11 +1245,21 @@ fn unported_files_keep_their_text() {
     // The port proceeds file by file, so a section with no Rust parser must
     // still round-trip its text for the Python reader to fall back to.
     //
-    // The photo-atomic fixture is used because every file in the neutron ones
-    // is now ported; MF=23 and MF=27 are still outstanding here.
-    let path = repo_root().join("tests").join("photoat-001_H_000.endf");
-    let text = std::fs::read_to_string(&path).unwrap();
+    // Built synthetically rather than taken from a fixture: every file in
+    // every fixture on this branch is now ported, and a test that depends on
+    // that not being true stops testing anything the moment it stops holding.
+    // MF=34 has no Rust parser yet; when it gains one, pick another.
+    const MF: i32 = 34;
+    let line =
+        |body: &str, mat: i32, mf: i32, mt: i32| format!("{body:<66}{mat:>4}{mf:>2}{mt:>3}\n");
+    let text = line(" tape id", 1, 0, 0)
+        + &line(" 1.001000+3 9.991673-1          0          0          1          0", 125, MF, 2)
+        + &line(" 0.000000+0 0.000000+0          0          2          1          1", 125, MF, 2)
+        + &line("", 125, MF, 0)   // SEND
+        + &line("", 0, 0, 0); // MEND
+
     let m = Material::from_str(&text).unwrap();
+    assert_eq!(m.mat, 125);
 
     let unparsed: Vec<(i32, i32)> = m
         .section_data
@@ -1092,12 +1267,37 @@ fn unported_files_keep_their_text() {
         .filter(|(_, s)| matches!(s, Section::Unparsed { .. }))
         .map(|(&k, _)| k)
         .collect();
-    assert!(
-        !unparsed.is_empty(),
-        "expected files that are not ported yet"
-    );
-    for key in unparsed {
-        let body = &m.section_text[&key];
-        assert!(!body.is_empty(), "MF={} MT={} lost its text", key.0, key.1);
+    assert_eq!(unparsed, vec![(MF, 2)], "MF={MF} should not have a parser");
+
+    // The body is kept whole, SEND excluded, so the Python reader can take it.
+    let body = &m.section_text[&(MF, 2)];
+    assert_eq!(body.lines().count(), 2);
+    assert!(body.contains("1.001000+3"));
+}
+
+/// Every fixture is now fully parsed. This guards the claim: if a fixture is
+/// added that contains a file with no Rust parser, it says so by name rather
+/// than the coverage quietly slipping.
+#[test]
+fn every_fixture_section_has_a_parser() {
+    let mut missing: BTreeSet<(String, i32, i32)> = BTreeSet::new();
+    for entry in std::fs::read_dir(repo_root().join("tests")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "endf") {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let text = std::fs::read_to_string(&path).unwrap();
+        for m in materials_from_str(&text).unwrap() {
+            for (&(mf, mt), section) in &m.section_data {
+                if matches!(section, Section::Unparsed { .. }) {
+                    missing.insert((name.clone(), mf, mt));
+                }
+            }
+        }
     }
+    assert!(
+        missing.is_empty(),
+        "fixtures contain files with no Rust parser: {missing:?}"
+    );
 }

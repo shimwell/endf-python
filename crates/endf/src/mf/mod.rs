@@ -11,6 +11,7 @@
 //! [`crate::material::Section::Unparsed`] with their text intact, so the two
 //! readers can run side by side while the port is checked file by file.
 
+pub mod atomic;
 pub mod mf1;
 pub mod mf2;
 pub mod mf3;
@@ -19,3 +20,4 @@ pub mod mf5;
 pub mod mf6;
 pub mod mf7;
 pub mod mf8;
+pub mod photon;

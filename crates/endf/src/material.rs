@@ -48,6 +48,22 @@ pub enum Section {
     Mf8Mt457(Box<mf::mf8::Mf8Mt457>),
     /// MF=9 or MF=10, isomer multiplicities and production cross sections.
     Mf9Mf10(Box<mf::mf8::Mf9Mf10>),
+    /// MF=12, photon production multiplicities.
+    Mf12(Box<mf::photon::Mf12>),
+    /// MF=13, photon production cross sections.
+    Mf13(Box<mf::photon::Mf13>),
+    /// MF=14, photon angular distributions.
+    Mf14(Box<mf::photon::Mf14>),
+    /// MF=15, continuous photon energy spectra.
+    Mf15(Box<mf::photon::Mf15>),
+    /// MF=23, photo-atomic and electro-atomic cross sections.
+    Mf23(Box<mf::atomic::Mf23>),
+    /// MF=26, electro-atomic secondary distributions.
+    Mf26(Box<mf::atomic::Mf26>),
+    /// MF=27, atomic form factors and scattering functions.
+    Mf27(Box<mf::atomic::Mf27>),
+    /// MF=28, atomic relaxation data.
+    Mf28(Box<mf::atomic::Mf28>),
     Unparsed {
         mf: i32,
         mt: i32,
@@ -257,6 +273,70 @@ impl Material {
         }
     }
 
+    /// The MF=12 section for a reaction.
+    pub fn mf12(&self, mt: i32) -> Option<&mf::photon::Mf12> {
+        match self.section_data.get(&(12, mt))? {
+            Section::Mf12(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=13 section for a reaction.
+    pub fn mf13(&self, mt: i32) -> Option<&mf::photon::Mf13> {
+        match self.section_data.get(&(13, mt))? {
+            Section::Mf13(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=14 section for a reaction.
+    pub fn mf14(&self, mt: i32) -> Option<&mf::photon::Mf14> {
+        match self.section_data.get(&(14, mt))? {
+            Section::Mf14(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=15 section for a reaction.
+    pub fn mf15(&self, mt: i32) -> Option<&mf::photon::Mf15> {
+        match self.section_data.get(&(15, mt))? {
+            Section::Mf15(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=23 section for a reaction.
+    pub fn mf23(&self, mt: i32) -> Option<&mf::atomic::Mf23> {
+        match self.section_data.get(&(23, mt))? {
+            Section::Mf23(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=26 section for a reaction.
+    pub fn mf26(&self, mt: i32) -> Option<&mf::atomic::Mf26> {
+        match self.section_data.get(&(26, mt))? {
+            Section::Mf26(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=27 section for a reaction.
+    pub fn mf27(&self, mt: i32) -> Option<&mf::atomic::Mf27> {
+        match self.section_data.get(&(27, mt))? {
+            Section::Mf27(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=28 section for a reaction.
+    pub fn mf28(&self, mt: i32) -> Option<&mf::atomic::Mf28> {
+        match self.section_data.get(&(28, mt))? {
+            Section::Mf28(s) => Some(s),
+            _ => None,
+        }
+    }
+
     /// The MF=2 MT=151 resonance parameters.
     pub fn mf2(&self) -> Option<&mf::mf2::Mf2> {
         match self.section_data.get(&(2, 151))? {
@@ -336,6 +416,14 @@ fn parse_section(mf: i32, mt: i32, text: &str) -> Result<Section> {
         (8, 457) => Section::Mf8Mt457(Box::new(mf::mf8::parse_mf8_mt457(&mut r)?)),
         (8, _) => Section::Mf8(Box::new(mf::mf8::parse_mf8(&mut r)?)),
         (9, _) | (10, _) => Section::Mf9Mf10(Box::new(mf::mf8::parse_mf9_mf10(&mut r, mf as i64)?)),
+        (12, _) => Section::Mf12(Box::new(mf::photon::parse_mf12(&mut r)?)),
+        (13, _) => Section::Mf13(Box::new(mf::photon::parse_mf13(&mut r)?)),
+        (14, _) => Section::Mf14(Box::new(mf::photon::parse_mf14(&mut r)?)),
+        (15, _) => Section::Mf15(Box::new(mf::photon::parse_mf15(&mut r)?)),
+        (23, _) => Section::Mf23(Box::new(mf::atomic::parse_mf23(&mut r)?)),
+        (26, _) => Section::Mf26(Box::new(mf::atomic::parse_mf26(&mut r)?)),
+        (27, _) => Section::Mf27(Box::new(mf::atomic::parse_mf27(&mut r)?)),
+        (28, _) => Section::Mf28(Box::new(mf::atomic::parse_mf28(&mut r)?)),
         _ => Section::Unparsed { mf, mt },
     })
 }

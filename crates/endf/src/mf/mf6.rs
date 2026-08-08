@@ -155,7 +155,8 @@ pub struct AngleEntry {
     pub f: Tabulated1D,
 }
 
-fn parse_continuum(reader: &mut Reader) -> Result<ContinuumEnergyAngle> {
+/// LAW=1. Public because MF=26 shares this law.
+pub fn parse_continuum_energy_angle(reader: &mut Reader) -> Result<ContinuumEnergyAngle> {
     let tab2 = reader.tab2_record()?;
     let mut data = ContinuumEnergyAngle {
         lang: tab2.cont.l1,
@@ -192,7 +193,8 @@ fn parse_continuum(reader: &mut Reader) -> Result<ContinuumEnergyAngle> {
     Ok(data)
 }
 
-fn parse_discrete_two_body(reader: &mut Reader) -> Result<DiscreteTwoBody> {
+/// LAW=2. Public because MF=26 shares this law.
+pub fn parse_discrete_two_body(reader: &mut Reader) -> Result<DiscreteTwoBody> {
     let tab2 = reader.tab2_record()?;
     let mut data = DiscreteTwoBody {
         nr: tab2.cont.n1,
@@ -279,7 +281,7 @@ pub fn parse_mf6(reader: &mut Reader) -> Result<Mf6> {
         let tab = reader.tab1_record()?;
         let law = tab.l2;
         let distribution = match law {
-            1 => Distribution::ContinuumEnergyAngle(parse_continuum(reader)?),
+            1 => Distribution::ContinuumEnergyAngle(parse_continuum_energy_angle(reader)?),
             2 => Distribution::DiscreteTwoBody(parse_discrete_two_body(reader)?),
             5 => Distribution::ChargedParticleElastic(parse_charged_particle(reader)?),
             6 => {

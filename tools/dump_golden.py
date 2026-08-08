@@ -398,38 +398,41 @@ def dump_mf6(d: Dump, path: str, mt: int, section: dict) -> None:
         d.tab1(f"{pp}/y_i", p["y_i"])
         if "distribution" not in p:
             continue
-        dist = p["distribution"]
-        dp = f"{pp}/distribution"
-        for key in ("LANG", "LEP", "NR", "NE", "LIDP", "NPSX"):
-            if key in dist:
-                d.int(f"{dp}/{key}", dist[key])
-        for key in ("SPI", "APSX"):
-            if key in dist:
-                d.float(f"{dp}/{key}", dist[key])
-        if "E_int" in dist:
-            d.tab2(f"{dp}/E_int", dist["E_int"])
-        if "E" in dist:
-            d.floats(f"{dp}/E", dist["E"])
-        for j, s in enumerate(dist.get("distribution", [])):
-            sp = f"{dp}/distribution/{j}"
-            for key in ("ND", "NA", "NW", "NEP", "LANG", "NL", "LTP", "NRM", "NMU"):
-                if key in s:
-                    d.int(f"{sp}/{key}", s[key])
-            if "E" in s:
-                d.float(f"{sp}/E", s["E"])
-            if "E'" in s:
-                d.floats(f"{sp}/Eout", s["E'"])
-            for key in ("A_l", "A"):
-                if key in s:
-                    d.floats(f"{sp}/{key}", s[key])
-            if "b" in s:
-                for r, row in enumerate(s["b"]):
-                    d.floats(f"{sp}/b/{r}", row)
-            if "mu_int" in s:
-                d.tab2(f"{sp}/mu_int", s["mu_int"])
-            for k, entry in enumerate(s.get("mu", [])):
-                d.float(f"{sp}/mu/{k}/mu", entry["mu"])
-                d.tab1(f"{sp}/mu/{k}/f", entry["f"])
+        dump_mf6_distribution(d, f"{pp}/distribution", p["distribution"])
+
+
+def dump_mf6_distribution(d: Dump, dp: str, dist: dict) -> None:
+    """One MF=6 distribution. Shared with MF=26, which reuses LAW=1 and LAW=2."""
+    for key in ("LANG", "LEP", "NR", "NE", "LIDP", "NPSX"):
+        if key in dist:
+            d.int(f"{dp}/{key}", dist[key])
+    for key in ("SPI", "APSX"):
+        if key in dist:
+            d.float(f"{dp}/{key}", dist[key])
+    if "E_int" in dist:
+        d.tab2(f"{dp}/E_int", dist["E_int"])
+    if "E" in dist:
+        d.floats(f"{dp}/E", dist["E"])
+    for j, s in enumerate(dist.get("distribution", [])):
+        sp = f"{dp}/distribution/{j}"
+        for key in ("ND", "NA", "NW", "NEP", "LANG", "NL", "LTP", "NRM", "NMU"):
+            if key in s:
+                d.int(f"{sp}/{key}", s[key])
+        if "E" in s:
+            d.float(f"{sp}/E", s["E"])
+        if "E'" in s:
+            d.floats(f"{sp}/Eout", s["E'"])
+        for key in ("A_l", "A"):
+            if key in s:
+                d.floats(f"{sp}/{key}", s[key])
+        if "b" in s:
+            for r, row in enumerate(s["b"]):
+                d.floats(f"{sp}/b/{r}", row)
+        if "mu_int" in s:
+            d.tab2(f"{sp}/mu_int", s["mu_int"])
+        for k, entry in enumerate(s.get("mu", [])):
+            d.float(f"{sp}/mu/{k}/mu", entry["mu"])
+            d.tab1(f"{sp}/mu/{k}/f", entry["f"])
 
 
 def _pairs(d: Dump, path: str, values) -> None:
@@ -580,6 +583,137 @@ def dump_mf9_mf10(d: Dump, path: str, mt: int, section: dict) -> None:
         d.tab1(f"{lp}/func", level["Y"] if "Y" in level else level["sigma"])
 
 
+def dump_mf12(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/LO", section["LO"])
+    d.int(f"{path}/NK", section["NK"])
+    if "Y" in section:
+        d.tab1(f"{path}/Y", section["Y"])
+    for i, k in enumerate(section.get("multiplicities", [])):
+        kp = f"{path}/multiplicities/{i}"
+        d.float(f"{kp}/Eg", k["Eg"])
+        d.float(f"{kp}/ES", k["ES"])
+        d.int(f"{kp}/LP", k["LP"])
+        d.int(f"{kp}/LF", k["LF"])
+        d.tab1(f"{kp}/y", k["y"])
+    if "LG" in section:
+        d.int(f"{path}/LG", section["LG"])
+        d.float(f"{path}/ES_NS", section["ES_NS"])
+        d.int(f"{path}/LP", section["LP"])
+        d.int(f"{path}/NT", section["NT"])
+        for i, t in enumerate(section["transitions"]):
+            tp = f"{path}/transitions/{i}"
+            d.float(f"{tp}/ES", t["ES"])
+            d.float(f"{tp}/TP", t["TP"])
+            if "GP" in t:
+                d.float(f"{tp}/GP", t["GP"])
+
+
+def dump_mf13(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/NK", section["NK"])
+    if "sigma_total" in section:
+        d.tab1(f"{path}/sigma_total", section["sigma_total"])
+    for i, p in enumerate(section["photons"]):
+        pp = f"{path}/photons/{i}"
+        d.float(f"{pp}/EG", p["EG"])
+        d.float(f"{pp}/ES", p["ES"])
+        d.int(f"{pp}/LP", p["LP"])
+        d.int(f"{pp}/LF", p["LF"])
+        d.tab1(f"{pp}/sigma", p["sigma"])
+
+
+def dump_mf14(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/LI", section["LI"])
+    d.int(f"{path}/NK", section["NK"])
+    if "LTT" in section:
+        d.int(f"{path}/LTT", section["LTT"])
+        d.int(f"{path}/NI", section["NI"])
+    for i, s in enumerate(section.get("subsections", [])):
+        sp = f"{path}/subsections/{i}"
+        d.float(f"{sp}/EG", s["EG"])
+        d.float(f"{sp}/ES", s["ES"])
+        if "E_int" in s:
+            d.tab2(f"{sp}/E_int", s["E_int"])
+            d.int(f"{sp}/NE", s["NE"])
+            d.floats(f"{sp}/E", s["E"])
+        if "NL" in s:
+            d.floats(f"{sp}/NL", s["NL"])
+        for j, a in enumerate(s.get("a_lk", [])):
+            d.floats(f"{sp}/a_lk/{j}", a)
+        for j, p in enumerate(s.get("p_k", [])):
+            d.tab1(f"{sp}/p_k/{j}", p)
+
+
+def dump_mf15(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/NC", section["NC"])
+    for i, s in enumerate(section["subsections"]):
+        sp = f"{path}/subsections/{i}"
+        d.int(f"{sp}/LF", s["LF"])
+        d.tab1(f"{sp}/p", s["p"])
+        d.tab2(f"{sp}/E_int", s["E_int"])
+        d.int(f"{sp}/NE", s["NE"])
+        d.floats(f"{sp}/E", s["E"])
+        for j, g in enumerate(s["g"]):
+            d.tab1(f"{sp}/g/{j}", g)
+
+
+def dump_mf23(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.float(f"{path}/EPE", section["EPE"])
+    d.float(f"{path}/EFL", section["EFL"])
+    d.tab1(f"{path}/sigma", section["sigma"])
+
+
+def dump_mf26(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/NK", section["NK"])
+    for i, p in enumerate(section["products"]):
+        pp = f"{path}/products/{i}"
+        d.int(f"{pp}/ZAP", p["ZAP"])
+        d.float(f"{pp}/AWI", p["AWI"])
+        d.int(f"{pp}/LAW", p["LAW"])
+        d.tab1(f"{pp}/y", p["y"])
+        if "distribution" not in p:
+            continue
+        dist = p["distribution"]
+        dp = f"{pp}/distribution"
+        if "ET" in dist:
+            d.tab1(f"{dp}/ET", dist["ET"])
+        else:
+            # LAW=1 and LAW=2 are shared with MF=6.
+            dump_mf6_distribution(d, dp, dist)
+
+
+def dump_mf27(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.float(f"{path}/Z", section["Z"])
+    d.tab1(f"{path}/H", section["H"])
+
+
+def dump_mf28(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/NSS", section["NSS"])
+    for i, s in enumerate(section["shells"]):
+        sp = f"{path}/shells/{i}"
+        d.float(f"{sp}/SUBI", s["SUBI"])
+        d.int(f"{sp}/NTR", s["NTR"])
+        d.float(f"{sp}/EBI", s["EBI"])
+        d.float(f"{sp}/ELN", s["ELN"])
+        for key in ("SUBJ", "SUBK", "ETR", "FTR"):
+            d.floats(f"{sp}/{key}", s[key])
+
+
 DUMPERS = {
     1: dump_mf1,
     2: dump_mf2,
@@ -587,6 +721,14 @@ DUMPERS = {
     4: dump_mf4,
     5: dump_mf5,
     6: dump_mf6,
+    12: dump_mf12,
+    13: dump_mf13,
+    14: dump_mf14,
+    15: dump_mf15,
+    23: dump_mf23,
+    26: dump_mf26,
+    27: dump_mf27,
+    28: dump_mf28,
     7: dump_mf7,
     8: dump_mf8,
     9: dump_mf9_mf10,
