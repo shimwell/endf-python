@@ -1,0 +1,31 @@
+//! A reader for ENDF-6 formatted evaluated nuclear data files.
+//!
+//! The layout follows the format itself: [`records`] holds the fixed-width
+//! record primitives, [`function`] the tabulated function types, [`mf`] one
+//! module per ENDF file (MF), and [`material`] the splitting of a file into
+//! materials and sections.
+//!
+//! ```no_run
+//! let material = endf::Material::from_file("n-095_Am_244.endf")?;
+//! let total = material.mf3(1).expect("total cross section");
+//! println!("{} barns at {} eV", total.sigma.eval(0.0253), 0.0253);
+//! # Ok::<(), endf::Error>(())
+//! ```
+//!
+//! Everything here describes the file format and nothing more. A
+//! simulation-ready projection of this data — reconstructed resonances,
+//! summed reactions, unionised grids — belongs in a consumer built on top,
+//! not in this crate.
+
+#![forbid(unsafe_code)]
+
+pub mod error;
+pub mod function;
+pub mod material;
+pub mod mf;
+pub mod records;
+
+pub use error::{Error, Result};
+pub use function::{Polynomial, Tabulated1D, Tabulated2D};
+pub use material::{get_materials, materials_from_str, Material, Section};
+pub use records::{float_endf, int_endf, Cont, Head, ListRecord, Matrix, Reader, Tab1, Tab2};

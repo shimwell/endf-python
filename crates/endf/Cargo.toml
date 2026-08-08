@@ -1,0 +1,13 @@
+[package]
+name = "endf"
+description = "Parser for ENDF-6 formatted evaluated nuclear data files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# Deliberately dependency-free. This crate is the format layer: consumers that
+# need Arrow, Python bindings or a simulation-ready projection build those on
+# top rather than paying for them here.
+[dependencies]

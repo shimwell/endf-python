@@ -8,3 +8,6 @@ doc/build/
 *.so
 generated/
 wheelhouse/
+
+# Rust
+/target
