@@ -37,35 +37,29 @@ ported.
 
 ## Coverage still wanted
 
-Every ENDF file the Python package parses now has a Rust parser. **Half of them
-have never been run against a real evaluation**: no fixture here contains
+Every ENDF file the Python package parses now has a Rust parser, and all but two
+are exercised by a fixture. The exceptions are
 
-    MF 6, 7, 12, 13, 14, 15, 26, 33, 34, 40
+    MF 13 (photon production cross sections) and MF 40 (radionuclide
+    production covariances)
 
-so those parsers are structurally complete and entirely unverified. The list is
-pinned in `golden.rs` as `UNCOVERED_BY_ANY_FIXTURE`, and the test fails when a
-fixture starts covering one — that is the moment to delete the entry.
+which are structurally complete and entirely unverified. The list is pinned in
+`golden.rs` as `UNCOVERED_BY_ANY_FIXTURE` and checked, so it cannot drift in
+either direction: the test fails both when a fixture starts covering one, and
+when a new parser arrives without coverage.
 
-Closing that gap needs fixtures, not code. In rough priority order:
+`MF2` is worth a line of its own. It now has real resonance parameters —
+Reich-Moore from Fe56 and U235, and a Case C unresolved region from U235 — but
+single-level and multi-level Breit-Wigner, Adler-Adler, R-matrix limited (LRF=7)
+and unresolved Cases A and B are still untested. Cases A and B are additionally
+unreachable through the current dispatch; see issue #15.
 
-- **MF6** — any non-actinide neutron evaluation. This is the biggest single gap:
-  MF6 carries the Kalbach-Mann and n-body distributions, which are four of the
-  shapes an Arrow projection has columns for, and not one line of that reader
-  has seen real data. Fe56 or Li6 would do it, and would also give MF2 a real
-  resonance range.
-- **MF33/34/40** — covariances. Any evaluation with an uncertainty file. These
-  are also the only route to exercising the INTG record.
-- **MF12–15** — photon production, present in most neutron evaluations.
-- **MF7** — thermal scattering, needs a `tsl-` file.
-- **MF26** — electro-atomic, needs an `electroat-` file.
+Trimming a fixture down to the sections that matter is what `tools/trim_endf.py`
+is for. A full evaluation runs to tens of megabytes, most of it covariance
+data — U235 is 36 MB whole and 451 KB with ten sections kept.
 
-`MF2` deserves its own line: it is covered, but only by a range with
-LRU=0/LRF=0, which is the scattering radius and nothing else. Breit-Wigner,
-Reich-Moore, R-matrix limited and all three unresolved cases are implemented
-and untested.
-
-The gaps below are what the Arrow conversion depends on, in roughly the order
-it needs them.
+The remaining gaps below are what the Arrow conversion depends on, in roughly
+the order it needs them.
 
 ### By format feature
 

@@ -1339,12 +1339,21 @@ fn check(golden_path: &Path) -> usize {
             // logs and exps are involved.
             (Value::Floats(a), Value::Floats(b)) if path.ends_with("/evaly") => {
                 assert_eq!(a.len(), b.len(), "{name}: {path} length");
-                for (i, (&x, &y)) in a.iter().zip(b).enumerate() {
-                    let tol = EVAL_TOL * y.abs().max(1.0);
-                    assert!(
-                        (x - y).abs() <= tol,
-                        "{name}: {path}[{i}]: rust {x} != python {y}"
-                    );
+                for (i, (&got, &want)) in a.iter().zip(b).enumerate() {
+                    // What is being checked is that the two readers agree, not
+                    // that the answer is finite. A tabulated S(alpha, beta) can
+                    // hold zeros, and log-linear interpolation across one gives
+                    // NaN in both languages alike — a real property of the
+                    // evaluation, reproduced faithfully. Comparing those with
+                    // subtraction would fail on NaN != NaN and hide it.
+                    let agree = if want.is_nan() {
+                        got.is_nan()
+                    } else if want.is_infinite() {
+                        got == want
+                    } else {
+                        (got - want).abs() <= EVAL_TOL * want.abs().max(1.0)
+                    };
+                    assert!(agree, "{name}: {path}[{i}]: rust {got} != python {want}");
                 }
             }
             _ => assert_eq!(got, want, "{name}: {path}"),
@@ -1417,7 +1426,7 @@ fn unported_files_keep_their_text() {
 /// Kept as an explicit list rather than a remark in a commit message: the test
 /// below fails when a fixture starts covering one of them, which is the moment
 /// the entry should be deleted.
-const UNCOVERED_BY_ANY_FIXTURE: [i32; 10] = [6, 7, 12, 13, 14, 15, 26, 33, 34, 40];
+const UNCOVERED_BY_ANY_FIXTURE: [i32; 2] = [13, 40];
 
 /// The MF files that have a Rust parser at all.
 const PORTED: [i32; 21] = [
