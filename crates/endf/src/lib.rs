@@ -29,6 +29,7 @@ pub mod material;
 pub mod mf;
 pub mod product;
 pub mod radionuclide_production;
+pub mod reaction;
 pub mod records;
 pub mod univariate;
 pub mod urr;
@@ -46,5 +47,6 @@ pub use radionuclide_production::{
     isomer_table, level_to_isomeric_state, radionuclide_production, Isomer, IsomerTable,
     RadionuclideProduction,
 };
+pub use reaction::{reaction_mt, reaction_name, Reaction, FISSION_MTS};
 pub use records::{float_endf, int_endf, Cont, Head, ListRecord, Matrix, Reader, Tab1, Tab2};
 pub use urr::ProbabilityTables;

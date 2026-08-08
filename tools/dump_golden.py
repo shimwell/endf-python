@@ -1145,6 +1145,65 @@ def dump(path: Path, out) -> None:
                 dumper(d, f"{m}/{mf}/{mt}", mt, material[mf, mt])
 
         dump_radionuclide_production(d, f"{m}/production", material)
+        dump_reactions(d, f"{m}/reaction", material)
+
+
+def dump_reactions(d: Dump, path: str, material) -> None:
+    """Every reaction the material evaluates, gathered from its files."""
+    from endf.reaction import FISSION_MTS, Reaction, _get_fission_products_endf
+
+    mts = sorted(mt for mf, mt in material.sections if mf == 3)
+    d.ints(f"{path}/mts", mts)
+    for mt in mts:
+        rx = Reaction.from_endf(mt, material)
+        # `Reaction.from_endf` computes the derived products and then drops
+        # them — there is a TODO in the source saying as much. The Rust
+        # reaction keeps them, so they are taken from the helper here and
+        # compared rather than left out of the check.
+        derived = []
+        if mt in FISSION_MTS:
+            derived = _get_fission_products_endf(material, mt)[1]
+        dump_reaction(d, f"{path}/{mt}", rx, derived)
+
+
+def dump_reaction(d: Dump, path: str, rx, derived_products) -> None:
+    d.int(f"{path}/MT", rx.MT)
+    d.float(f"{path}/q_reaction", rx.q_reaction)
+    d.float(f"{path}/q_massdiff", rx.q_massdiff)
+    d.int(f"{path}/redundant", int(rx.redundant))
+    d.int(f"{path}/center_of_mass", int(rx.center_of_mass))
+    for temperature, xs in sorted(rx.xs.items()):
+        d.tab1(f"{path}/xs/{temperature}", xs)
+    for kind, products in (
+        ("products", rx.products),
+        ("derived_products", derived_products),
+    ):
+        d.int(f"{path}/n_{kind}", len(products))
+        for i, product in enumerate(products):
+            dump_product(d, f"{path}/{kind}/{i}", product)
+
+
+def dump_product(d: Dump, path: str, product) -> None:
+    from numpy.polynomial import Polynomial
+
+    from endf.function import Tabulated1D
+
+    d.text(f"{path}/name", product.name)
+    d.text(f"{path}/emission_mode", product.emission_mode)
+    d.float(f"{path}/decay_rate", product.decay_rate)
+    if isinstance(product.yield_, Tabulated1D):
+        d.text(f"{path}/yield/kind", "tabulated")
+        d.tab1(f"{path}/yield/f", product.yield_)
+    elif isinstance(product.yield_, Polynomial):
+        d.text(f"{path}/yield/kind", "polynomial")
+        d.floats(f"{path}/yield/coef", product.yield_.coef)
+    else:
+        raise TypeError(f"unexpected yield {type(product.yield_)}")
+    for i, applicability in enumerate(product.applicability):
+        d.tab1(f"{path}/applicability/{i}", applicability)
+    d.int(f"{path}/n_distribution", len(product.distribution))
+    for i, dist in enumerate(product.distribution):
+        dump_angle_energy(d, f"{path}/distribution/{i}", dist)
 
 
 def dump_radionuclide_production(d: Dump, path: str, material) -> None:

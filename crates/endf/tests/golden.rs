@@ -522,6 +522,78 @@ fn dump_angle_distribution(d: &mut Dump, path: &str, dist: &AngleDistribution) {
     }
 }
 
+/// Mirrors `dump_reactions` in `tools/dump_golden.py`.
+fn dump_reactions(d: &mut Dump, path: &str, material: &Material) {
+    let mts: Vec<i32> = material
+        .section_data
+        .keys()
+        .filter(|&&(mf, _)| mf == 3)
+        .map(|&(_, mt)| mt)
+        .collect();
+    d.ints(
+        format!("{path}/mts"),
+        mts.iter().map(|&mt| mt as i64).collect(),
+    );
+    for mt in mts {
+        let rx = endf::Reaction::from_endf(mt, material).unwrap();
+        dump_reaction(d, &format!("{path}/{mt}"), &rx);
+    }
+}
+
+/// Mirrors `dump_reaction` in `tools/dump_golden.py`.
+fn dump_reaction(d: &mut Dump, path: &str, rx: &endf::Reaction) {
+    d.int(format!("{path}/MT"), rx.mt as i64);
+    d.float(format!("{path}/q_reaction"), rx.q_reaction);
+    d.float(format!("{path}/q_massdiff"), rx.q_massdiff);
+    d.int(format!("{path}/redundant"), i64::from(rx.redundant));
+    d.int(
+        format!("{path}/center_of_mass"),
+        i64::from(rx.center_of_mass),
+    );
+    for (temperature, xs) in &rx.xs {
+        d.tab1(&format!("{path}/xs/{temperature}"), xs);
+    }
+    for (kind, products) in [
+        ("products", &rx.products),
+        ("derived_products", &rx.derived_products),
+    ] {
+        d.int(format!("{path}/n_{kind}"), products.len() as i64);
+        for (i, product) in products.iter().enumerate() {
+            dump_product(d, &format!("{path}/{kind}/{i}"), product);
+        }
+    }
+}
+
+/// Mirrors `dump_product` in `tools/dump_golden.py`.
+fn dump_product(d: &mut Dump, path: &str, product: &endf::Product) {
+    d.text(format!("{path}/name"), &product.name);
+    d.text(
+        format!("{path}/emission_mode"),
+        product.emission_mode.name(),
+    );
+    d.float(format!("{path}/decay_rate"), product.decay_rate);
+    match &product.yield_ {
+        endf::Yield::Tabulated(t) => {
+            d.text(format!("{path}/yield/kind"), "tabulated");
+            d.tab1(&format!("{path}/yield/f"), t);
+        }
+        endf::Yield::Polynomial(p) => {
+            d.text(format!("{path}/yield/kind"), "polynomial");
+            d.floats(format!("{path}/yield/coef"), p.coefficients.clone());
+        }
+    }
+    for (i, applicability) in product.applicability.iter().enumerate() {
+        d.tab1(&format!("{path}/applicability/{i}"), applicability);
+    }
+    d.int(
+        format!("{path}/n_distribution"),
+        product.distribution.len() as i64,
+    );
+    for (i, dist) in product.distribution.iter().enumerate() {
+        dump_angle_energy(d, &format!("{path}/distribution/{i}"), dist);
+    }
+}
+
 /// Mirrors `dump_radionuclide_production` in `tools/dump_golden.py`.
 fn dump_radionuclide_production(d: &mut Dump, path: &str, material: &Material) {
     let production = endf::radionuclide_production(material);
@@ -1660,6 +1732,22 @@ fn parse_golden(text: &str, name: &str) -> Golden {
 ///
 /// Shared by the ENDF and ACE paths: a field renamed, dropped or added shows up
 /// as a path on one side and not the other, whatever produced it.
+/// Whether a path holds values produced by evaluating an interpolation rather
+/// than read off the file.
+///
+/// Two kinds qualify. `…/evaly` is the sampled interpolation the dump takes of
+/// every TAB1. The reaction yields are the other: a product given by MF=10 as
+/// a production cross section becomes a yield by dividing two interpolated
+/// cross sections on their union grid, and the Python reader does that with
+/// NumPy's array `log`, whose SIMD implementation differs from scalar `log` in
+/// the last bit. The tolerance is 1e-12 relative, so a real disagreement — a
+/// wrong value, a wrong index, a wrong law — still fails; only last-bit noise
+/// passes. It also covers the MF=9 yields, which are read verbatim and would
+/// otherwise be compared exactly.
+fn is_interpolated(path: &str) -> bool {
+    path.ends_with("/evaly") || (path.contains("/reaction/") && path.contains("/yield/f/"))
+}
+
 fn compare(name: &str, ours: &BTreeMap<String, Value>, theirs: &BTreeMap<String, Value>) {
     let ours_keys: BTreeSet<&String> = ours.keys().collect();
     let theirs_keys: BTreeSet<&String> = theirs.keys().collect();
@@ -1689,7 +1777,7 @@ fn compare(name: &str, ours: &BTreeMap<String, Value>, theirs: &BTreeMap<String,
             // Interpolation is arithmetic, not parsing: the two languages
             // evaluate the same expression but need not round identically once
             // logs and exps are involved.
-            (Value::Floats(a), Value::Floats(b)) if path.ends_with("/evaly") => {
+            (Value::Floats(a), Value::Floats(b)) if is_interpolated(path) => {
                 assert_eq!(a.len(), b.len(), "{name}: {path} length");
                 for (i, (&got, &want)) in a.iter().zip(b).enumerate() {
                     // What is being checked is that the two readers agree, not
@@ -1761,6 +1849,7 @@ fn check(golden_path: &Path) -> usize {
             dump_section(&mut d, &format!("{m}/{mf}/{mt}"), section);
         }
         dump_radionuclide_production(&mut d, &format!("{m}/production"), material);
+        dump_reactions(&mut d, &format!("{m}/reaction"), material);
     }
 
     assert_eq!(sections, g.sections, "{name}: section splitting differs");

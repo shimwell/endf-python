@@ -36,6 +36,7 @@ Nothing in the Rust test needs changing — it discovers golden files and follow
 |---|---|
 | `MATERIALS`, `MAT` | Multi-material files, material numbers |
 | `SECTION mf mt n` | Section splitting, for **every** MF including unported ones |
+| `production/…`, `reaction/…` | The derived views: the MF=8/9/10 join, and every reaction gathered from its files |
 | `MF3 …`, `BP`, `INT`, `X`, `Y` | Parsed values, compared **exactly** |
 | `EVALX` / `EVALY` | Interpolation, compared to 1e-12 relative |
 
@@ -89,7 +90,7 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 | `n-054_Xe_136_trimmed` | MF1, MF3 |
 | `n-003_Li_006_trimmed` | MF6 LAW=2 and LAW=4, MF12, MF14, MF33 |
 | `n-026_Fe_056_trimmed` | MF2 Reich-Moore, MF6 LAW=1, MF12/14, MF33 |
-| `n-092_U_235_trimmed` | MF2 Reich-Moore + Case C URR, MF8, MF10, MF15, MF34 |
+| `n-092_U_235_trimmed` | MF2 Reich-Moore + Case C URR, MF5 LF=5, MF8, MF10, MF15, MF34, delayed neutron groups |
 | `photoat-001_H_000` | MF23, MF27 |
 | `atom-001_H_000` | MF28 |
 | `e-001_H_000` | MF23, MF26 in all three laws |
@@ -117,10 +118,12 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
   fixture would only pin that rejection.
 - **MF8 MT=454 and MT=459**, the fission product yields. MT=457 is now
   covered by the two In116 decay fixtures; the yields are not.
-- **MF5 LF=5 (general evaporation) and LF=12 (Madland-Nix)**. LF=1, LF=7 and
-  LF=9 are covered by Li6 and Am244; the other two ENDF laws have no fixture.
-  Both are parsed and neither is verified. The ACE side is complete apart from
-  law 5, which the Python reader cannot read at all — see issue #19.
+- **MF5 LF=12 (Madland-Nix)**. LF=1, LF=5, LF=7 and LF=9 are covered by Li6,
+  Am244 and U235; Madland-Nix has no fixture. The ACE side is complete apart
+  from law 5, which the Python reader cannot read at all — see issue #19.
+- **A delayed neutron group whose applicability varies with energy.** U235
+  gives each group a constant share, which is the usual case; the branch that
+  takes the product on the union of two grids is unexercised.
 - **Other libraries.** Everything here is ENDF/B-VIII.0 except the ACE table,
   which is TENDL-2023.1. JEFF-4.0, JENDL-5 and TENDL-2025 differ in which
   optional records they write and how strictly they follow the format, which is
