@@ -138,15 +138,35 @@ def dump_nu(d: Dump, path: str, section: dict) -> None:
 def dump_mf1(d: Dump, path: str, mt: int, section: dict) -> None:
     if mt == 451:
         for key in (
-            "ZA", "LRP", "LFI", "NLIB", "NMOD", "LIS", "LISO", "NFOR",
-            "LREL", "NSUB", "NVER", "LDRV", "NWD", "NXC",
+            "ZA",
+            "LRP",
+            "LFI",
+            "NLIB",
+            "NMOD",
+            "LIS",
+            "LISO",
+            "NFOR",
+            "LREL",
+            "NSUB",
+            "NVER",
+            "LDRV",
+            "NWD",
+            "NXC",
         ):
             d.int(f"{path}/{key}", section[key])
         for key in ("AWR", "ELIS", "STA", "AWI", "EMAX", "TEMP"):
             d.float(f"{path}/{key}", section[key])
         if section.get("ZSYMAM") is not None:
-            for key in ("ZSYMAM", "ALAB", "EDATE", "AUTH", "REF", "DDATE",
-                        "RDATE", "ENDATE"):
+            for key in (
+                "ZSYMAM",
+                "ALAB",
+                "EDATE",
+                "AUTH",
+                "REF",
+                "DDATE",
+                "RDATE",
+                "ENDATE",
+            ):
                 d.text(f"{path}/{key}", section[key])
             for i, line in enumerate(section["HSUB"]):
                 d.text(f"{path}/HSUB/{i}", line)
@@ -621,7 +641,9 @@ def main() -> None:
         target = GOLDEN_DIR / f"{path.stem}.txt"
         with open(target, "w") as out:
             dump(path, out)
-        print(f"{target.relative_to(ROOT)}  <-  {path.relative_to(ROOT)}", file=sys.stderr)
+        print(
+            f"{target.relative_to(ROOT)}  <-  {path.relative_to(ROOT)}", file=sys.stderr
+        )
 
 
 if __name__ == "__main__":
