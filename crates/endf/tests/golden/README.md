@@ -94,6 +94,8 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 | `atom-001_H_000` | MF28 |
 | `e-001_H_000` | MF23, MF26 in all three laws |
 | `tsl-s-CH4` | MF7 MT=2 and MT=4 |
+| `dec-049_In_116m1` | MF8 MT=457 decay data: four spectra, beta- only |
+| `dec-049_In_116m2` | MF8 MT=457 decay data: an isomeric transition down to m1 |
 | `Li6.ace` | An ACE Type 1 table; AND in all three shapes, DLW laws 3, 33 and 44 |
 | `synthetic-urr.ace` | The unresolved resonance block, which no small real table has |
 | `synthetic-laws.ace` | DLW laws 2, 4, 7, 9, 11, 61 and 66 |
@@ -113,6 +115,8 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
   see issue #15 — so a fixture alone will not cover them.
 - **Adler-Adler (LRF=4)**, which both readers reject rather than parse. A
   fixture would only pin that rejection.
+- **MF8 MT=454 and MT=459**, the fission product yields. MT=457 is now
+  covered by the two In116 decay fixtures; the yields are not.
 - **MF5 LF=5 (general evaporation) and LF=12 (Madland-Nix)**. LF=1, LF=7 and
   LF=9 are covered by Li6 and Am244; the other two ENDF laws have no fixture.
   Both are parsed and neither is verified. The ACE side is complete apart from

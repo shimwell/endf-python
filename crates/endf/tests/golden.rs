@@ -522,6 +522,34 @@ fn dump_angle_distribution(d: &mut Dump, path: &str, dist: &AngleDistribution) {
     }
 }
 
+/// Mirrors `dump_radionuclide_production` in `tools/dump_golden.py`.
+fn dump_radionuclide_production(d: &mut Dump, path: &str, material: &Material) {
+    let production = endf::radionuclide_production(material);
+    d.ints(
+        format!("{path}/mts"),
+        production.keys().map(|&mt| mt as i64).collect(),
+    );
+    for (mt, states) in &production {
+        for (i, state) in states.iter().enumerate() {
+            let sp = format!("{path}/{mt}/{i}");
+            d.int(format!("{sp}/ZAP"), state.zap);
+            d.int(format!("{sp}/LFS"), state.lfs);
+            d.float(format!("{sp}/QM"), state.qm);
+            d.float(format!("{sp}/QI"), state.qi);
+            if let Some(elfs) = state.elfs {
+                d.float(format!("{sp}/ELFS"), elfs);
+            }
+            d.float(format!("{sp}/excitation_energy"), state.excitation_energy());
+            if let Some(y) = &state.yields {
+                d.tab1(&format!("{sp}/yields"), y);
+            }
+            if let Some(xs) = &state.cross_section {
+                d.tab1(&format!("{sp}/cross_section"), xs);
+            }
+        }
+    }
+}
+
 /// Mirrors `dump_univariate` in `tools/dump_golden.py`.
 fn dump_univariate(d: &mut Dump, p: &str, u: &Univariate) {
     let c = match u {
@@ -1732,6 +1760,7 @@ fn check(golden_path: &Path) -> usize {
         for (&(mf, mt), section) in &material.section_data {
             dump_section(&mut d, &format!("{m}/{mf}/{mt}"), section);
         }
+        dump_radionuclide_production(&mut d, &format!("{m}/production"), material);
     }
 
     assert_eq!(sections, g.sections, "{name}: section splitting differs");

@@ -708,8 +708,14 @@ def dump_mf8(d: Dump, path: str, mt: int, section: dict) -> None:
                 d.floats(f"{rp}/ER", list(r["ER"]))
                 d.float(f"{rp}/RTYP", r["RTYP"])
                 d.float(f"{rp}/TYPE", r["TYPE"])
+                # A discrete record is written with NT = 6 or NT = 12
+                # depending on whether the internal conversion coefficients
+                # were evaluated, and both lengths appear within one spectrum.
+                # The Python reader slices, so an absent coefficient is an
+                # empty tuple; the Rust reader makes it None. Same fact, so
+                # the empty ones are skipped here rather than compared.
                 for key in ("RI", "RIS", "RICC", "RICK", "RICL"):
-                    if key in r:
+                    if r.get(key):
                         d.floats(f"{rp}/{key}", list(r[key]))
             if "continuous" in s:
                 d.float(f"{sp}/continuous/RTYP", s["continuous"]["RTYP"])
@@ -1137,6 +1143,30 @@ def dump(path: Path, out) -> None:
             dumper = DUMPERS.get(mf)
             if dumper is not None:
                 dumper(d, f"{m}/{mf}/{mt}", mt, material[mf, mt])
+
+        dump_radionuclide_production(d, f"{m}/production", material)
+
+
+def dump_radionuclide_production(d: Dump, path: str, material) -> None:
+    """The MF=8/9/10 join, which is a derived view rather than a section."""
+    from endf.radionuclide_production import radionuclide_production
+
+    production = radionuclide_production(material)
+    d.ints(f"{path}/mts", sorted(production))
+    for mt, states in sorted(production.items()):
+        for i, state in enumerate(states):
+            sp = f"{path}/{mt}/{i}"
+            d.int(f"{sp}/ZAP", state.ZAP)
+            d.int(f"{sp}/LFS", state.LFS)
+            d.float(f"{sp}/QM", state.QM)
+            d.float(f"{sp}/QI", state.QI)
+            if state.ELFS is not None:
+                d.float(f"{sp}/ELFS", state.ELFS)
+            d.float(f"{sp}/excitation_energy", state.excitation_energy)
+            if state.yields is not None:
+                d.tab1(f"{sp}/yields", state.yields)
+            if state.cross_section is not None:
+                d.tab1(f"{sp}/cross_section", state.cross_section)
 
 
 def dump_ace_file(path: Path, out) -> None:

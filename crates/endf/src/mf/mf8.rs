@@ -185,6 +185,17 @@ fn pair(values: &[f64], i: usize) -> WithUncertainty {
     )
 }
 
+/// The same, but `None` when the record is too short to hold the pair.
+///
+/// MF=8 MT=457 discrete records are written with NT = 6 or NT = 12 depending
+/// on whether the internal conversion coefficients were evaluated, and the two
+/// lengths appear within a single spectrum. The Python reader slices, so a
+/// missing coefficient comes back as an empty tuple rather than as a zero;
+/// this keeps that distinction.
+fn opt_pair(values: &[f64], i: usize) -> Option<WithUncertainty> {
+    (values.len() >= i + 2).then(|| pair(values, i))
+}
+
 fn column(values: &[f64], offset: usize, stride: usize) -> Vec<f64> {
     values
         .iter()
@@ -347,10 +358,12 @@ pub fn parse_mf8_mt457(reader: &mut Reader) -> Result<Mf8Mt457> {
                     rtyp: v.first().copied().unwrap_or(0.0),
                     type_: v.get(1).copied().unwrap_or(0.0),
                     ri: pair(v, 2),
-                    ris: (styp == 0.0 || styp == 2.0).then(|| pair(v, 4)),
-                    ricc: (styp == 0.0).then(|| pair(v, 6)),
-                    rick: (styp == 0.0).then(|| pair(v, 8)),
-                    ricl: (styp == 0.0).then(|| pair(v, 10)),
+                    ris: (styp == 0.0 || styp == 2.0)
+                        .then(|| opt_pair(v, 4))
+                        .flatten(),
+                    ricc: (styp == 0.0).then(|| opt_pair(v, 6)).flatten(),
+                    rick: (styp == 0.0).then(|| opt_pair(v, 8)).flatten(),
+                    ricl: (styp == 0.0).then(|| opt_pair(v, 10)).flatten(),
                 });
             }
         }

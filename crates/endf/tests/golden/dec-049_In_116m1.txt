@@ -1,0 +1,673 @@
+# golden reference generated from tests/dec-049_In_116m1.endf by the Python reader
+# regenerate with: python tools/dump_golden.py
+SOURCE tests/dec-049_In_116m1.endf
+MATERIALS 1
+MAT 0 1477
+SECTION 0 1 451 38
+SECTION 0 8 457 268
+V 0/1/451/ZA I 49116
+V 0/1/451/LRP I -1
+V 0/1/451/LFI I 0
+V 0/1/451/NLIB I 0
+V 0/1/451/NMOD I 0
+V 0/1/451/LIS I 1
+V 0/1/451/LISO I 1
+V 0/1/451/NFOR I 6
+V 0/1/451/LREL I 0
+V 0/1/451/NSUB I 4
+V 0/1/451/NVER I 8
+V 0/1/451/LDRV I 0
+V 0/1/451/NWD I 32
+V 0/1/451/NXC I 2
+V 0/1/451/AWR F 114.9096
+V 0/1/451/ELIS F 127267.0
+V 0/1/451/STA F 1.0
+V 0/1/451/AWI F 0.0
+V 0/1/451/EMAX F 0.0
+V 0/1/451/TEMP F 0.0
+V 0/1/451/ZSYMAM T 2034392d496e2d3131364d
+V 0/1/451/ALAB T 20424e4c20202020202020
+V 0/1/451/EDATE T 204556414c2d4e4f5630
+V 0/1/451/AUTH T 3520436f6e76657273696f6e2066726f6d20454e5344462020202020202020202020
+V 0/1/451/REF T 2f454e5344462f2020202020202020202020202020
+V 0/1/451/DDATE T 444953542d4645423138
+V 0/1/451/RDATE T 20202020202020202020
+V 0/1/451/ENDATE T 3230313131323232
+V 0/1/451/HSUB/0 T 2d2d2d2d454e44462f422d564949492e3020202020204d6174657269616c203134373720202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/HSUB/1 T 2d2d2d2d2d524144494f4143544956452044454341592044415441202020202020202020202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/HSUB/2 T 2d2d2d2d2d2d454e44462d3620464f524d41542020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/description/0 T 2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a20426567696e204465736372697074696f6e202a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a20
+V 0/1/451/description/1 T 2a2a202020202020202020454e44462f422d5649492e3120524144494f41435449564520444543415920444154412046494c452020202020202020202020202a2a20
+V 0/1/451/description/2 T 2a2a20202020202020202050726f647563656420617420746865204e4e44432066726f6d2074686520454e53444620646174616261736520202020202020202a2a20
+V 0/1/451/description/3 T 2a2a2020202020202020202020202020205472616e736c6174656420696e746f20454e444620666f726d61742062793a2020202020202020202020202020202a2a20
+V 0/1/451/description/4 T 2a2a20202020542e442e204a6f686e736f6e2c20452e412e204d634375746368616e20616e6420412e412e20536f6e7a6f676e692c203230313120202020202a2a20
+V 0/1/451/description/5 T 2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a20
+V 0/1/451/description/6 T 454e534446206576616c756174696f6e20617574686f72733a204a45414e20424c4143484f5420202020202020202020202020202020202020202020202020202020
+V 0/1/451/description/7 T 506172656e742045786369746174696f6e20456e657267793a203132372e323637202020202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/description/8 T 506172656e74205370696e2026205061726974793a20352b202020202020202020202020202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/description/9 T 506172656e742068616c662d6c6966653a2035342e3239204d2031372020202020202020202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/description/10 T 4465636179204d6f64653a20422d20202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/description/11 T 2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a20456e65726779202042616c616e6365202a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a20
+V 0/1/451/description/12 T 4d65616e2047616d6d6120456e657267793a202020202020322e3438384533202b2d20312e3833334531206b65562020202020202020202020202020202020202020
+V 0/1/451/description/13 T 4d65616e20582d5261792b35313120456e657267793a2020322e373030452d31202b2d20312e3833334531206b655620202020202020202020202020202020202020
+V 0/1/451/description/14 T 4d65616e2043452b417567657220456e657267793a202020342e3335324530202b2d20332e393130452d32206b655620202020202020202020202020202020202020
+V 0/1/451/description/15 T 4d65616e20422d20456e657267793a202020202020202020332e3131354532202b2d20322e3534374530206b65562020202020202020202020202020202020202020
+V 0/1/451/description/16 T 4d65616e20422b20456e657267793a202020202020202020302e3030304530202b2d20302e3030304530206b65562020202020202020202020202020202020202020
+V 0/1/451/description/17 T 4d65616e204e65757472696e6f20456e657267793a202020352e3937314532202b2d20352e3136354530206b65562020202020202020202020202020202020202020
+V 0/1/451/description/18 T 4d65616e204e657574726f6e20456e657267793a20202020302e3030304530202b2d20302e3030304530206b65562020202020202020202020202020202020202020
+V 0/1/451/description/19 T 4d65616e2050726f746f6e20456e657267793a2020202020302e3030304530202b2d20302e3030304530206b65562020202020202020202020202020202020202020
+V 0/1/451/description/20 T 4d65616e20416c70686120456e657267793a202020202020302e3030304530202b2d20302e3030304530206b65562020202020202020202020202020202020202020
+V 0/1/451/description/21 T 4d65616e205265636f696c20456e657267793a2020202020302e3030304530202b2d20302e3030304530206b65562020202020202020202020202020202020202020
+V 0/1/451/description/22 T 53756d204d65616e20456e6572676965733a202020202020332e3430314533202b2d20312e3932324531206b65562020202020202020202020202020202020202020
+V 0/1/451/description/23 T 51206566666563746976653a202020202020202020202020332e3430364533206b655620202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/description/24 T 4d697373696e6720456e657267793a202020202020202020352e3132324530206b655620202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/description/25 T 446576696174696f6e3a2020202020202020202020202020312e353034452d3120252020202020202020202020202020202020202020202020202020202020202020
+V 0/1/451/description/26 T 2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a20456e64204465736372697074696f6e202a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a20
+V 0/1/451/section_list/0 I 1 451 38 0
+V 0/1/451/section_list/1 I 8 457 268 0
+V 0/8/457/ZA I 49116
+V 0/8/457/AWR F 114.9096
+V 0/8/457/LIS I 1
+V 0/8/457/LISO I 1
+V 0/8/457/NST I 0
+V 0/8/457/NSP I 4
+V 0/8/457/SPI F 5.0
+V 0/8/457/PAR F 1.0
+V 0/8/457/T1_2 F 3257.4 10.2
+V 0/8/457/NC I 3
+V 0/8/457/Ex F 315833.6 2547.391 2488210.0 18332.87 0.0 0.0
+V 0/8/457/NDK I 1
+V 0/8/457/modes/0/RTYP F 1.0
+V 0/8/457/modes/0/RFS F 0.0
+V 0/8/457/modes/0/Q F 3406267.0 4000.004
+V 0/8/457/modes/0/BR F 1.0 0.0
+V 0/8/457/spectra/0/STYP F 0.0
+V 0/8/457/spectra/0/LCON I 0
+V 0/8/457/spectra/0/LCOV I 0
+V 0/8/457/spectra/0/NER I 40
+V 0/8/457/spectra/0/FD F 1.0 0.0
+V 0/8/457/spectra/0/ER_AV F 2487940.0 18332.86
+V 0/8/457/spectra/0/FC F 0.0 0.0
+V 0/8/457/spectra/0/discrete/0/ER F 99730.0 40.0
+V 0/8/457/spectra/0/discrete/0/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/0/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/0/RI F 0.00023744 2.553843e-05
+V 0/8/457/spectra/0/discrete/0/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/0/RICC F 1.611 0.0
+V 0/8/457/spectra/0/discrete/0/RICK F 1.167 0.017
+V 0/8/457/spectra/0/discrete/0/RICL F 0.357 0.005
+V 0/8/457/spectra/0/discrete/1/ER F 124650.0 50.0
+V 0/8/457/spectra/0/discrete/1/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/1/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/1/RI F 0.00010176 1.698715e-05
+V 0/8/457/spectra/0/discrete/1/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/2/ER F 138290.0 20.0
+V 0/8/457/spectra/0/discrete/2/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/2/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/2/RI F 0.0369728 0.0009169326
+V 0/8/457/spectra/0/discrete/2/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/2/RICC F 0.227 0.0
+V 0/8/457/spectra/0/discrete/2/RICK F 0.196 0.003
+V 0/8/457/spectra/0/discrete/2/RICL F 0.0249 0.0004
+V 0/8/457/spectra/0/discrete/3/ER F 163400.0 100.0
+V 0/8/457/spectra/0/discrete/3/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/3/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/3/RI F 0.00015264 1.702102e-05
+V 0/8/457/spectra/0/discrete/3/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/4/ER F 165720.0 100.0
+V 0/8/457/spectra/0/discrete/4/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/4/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/4/RI F 0.00013568 1.700823e-05
+V 0/8/457/spectra/0/discrete/4/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/5/ER F 244980.0 50.0
+V 0/8/457/spectra/0/discrete/5/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/5/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/5/RI F 0.00033072 2.563061e-05
+V 0/8/457/spectra/0/discrete/5/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/6/ER F 263030.0 30.0
+V 0/8/457/spectra/0/discrete/6/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/6/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/6/RI F 0.00125504 4.40221e-05
+V 0/8/457/spectra/0/discrete/6/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/7/ER F 271960.0 40.0
+V 0/8/457/spectra/0/discrete/7/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/7/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/7/RI F 0.0003816 3.41105e-05
+V 0/8/457/spectra/0/discrete/7/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/8/ER F 278620.0 20.0
+V 0/8/457/spectra/0/discrete/8/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/8/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/8/RI F 0.00129744 3.606084e-05
+V 0/8/457/spectra/0/discrete/8/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/9/ER F 303730.0 40.0
+V 0/8/457/spectra/0/discrete/9/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/9/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/9/RI F 0.00120416 6.043723e-05
+V 0/8/457/spectra/0/discrete/9/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/10/ER F 355400.0 20.0
+V 0/8/457/spectra/0/discrete/10/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/10/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/10/RI F 0.00730128 0.0001092497
+V 0/8/457/spectra/0/discrete/10/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/10/RICC F 0.0206 0.0
+V 0/8/457/spectra/0/discrete/10/RICK F 0.01743 0.00025
+V 0/8/457/spectra/0/discrete/10/RICL F 0.00255 4e-05
+V 0/8/457/spectra/0/discrete/11/ER F 395640.0 160.0
+V 0/8/457/spectra/0/discrete/11/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/11/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/11/RI F 6.784e-05 2.120966e-05
+V 0/8/457/spectra/0/discrete/11/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/12/ER F 410230.0 40.0
+V 0/8/457/spectra/0/discrete/12/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/12/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/12/RI F 0.00060208 2.606638e-05
+V 0/8/457/spectra/0/discrete/12/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/13/ER F 416900.0 20.0
+V 0/8/457/spectra/0/discrete/13/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/13/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/13/RI F 0.272208 0.00361477
+V 0/8/457/spectra/0/discrete/13/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/13/RICC F 0.01258 0.0
+V 0/8/457/spectra/0/discrete/13/RICK F 0.01072 0.00015
+V 0/8/457/spectra/0/discrete/13/RICL F 0.001507 2.2e-05
+V 0/8/457/spectra/0/discrete/14/ER F 435180.0 60.0
+V 0/8/457/spectra/0/discrete/14/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/14/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/14/RI F 0.00022896 2.553153e-05
+V 0/8/457/spectra/0/discrete/14/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/15/ER F 463210.0 20.0
+V 0/8/457/spectra/0/discrete/15/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/15/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/15/RI F 0.0072504 0.0001089477
+V 0/8/457/spectra/0/discrete/15/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/16/ER F 517230.0 100.0
+V 0/8/457/spectra/0/discrete/16/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/16/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/16/RI F 0.0001272 1.70024e-05
+V 0/8/457/spectra/0/discrete/16/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/17/ER F 535030.0 50.0
+V 0/8/457/spectra/0/discrete/17/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/17/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/17/RI F 0.0003392 2.564047e-05
+V 0/8/457/spectra/0/discrete/17/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/18/ER F 567550.0 60.0
+V 0/8/457/spectra/0/discrete/18/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/18/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/18/RI F 0.00054272 4.270801e-05
+V 0/8/457/spectra/0/discrete/18/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/19/ER F 655170.0 20.0
+V 0/8/457/spectra/0/discrete/19/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/19/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/19/RI F 0.0012296 2.795986e-05
+V 0/8/457/spectra/0/discrete/19/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/20/ER F 679850.0 80.0
+V 0/8/457/spectra/0/discrete/20/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/20/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/20/RI F 0.00020352 3.39743e-05
+V 0/8/457/spectra/0/discrete/20/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/21/ER F 688930.0 20.0
+V 0/8/457/spectra/0/discrete/21/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/21/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/21/RI F 0.00166208 3.736882e-05
+V 0/8/457/spectra/0/discrete/21/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/22/ER F 705970.0 20.0
+V 0/8/457/spectra/0/discrete/22/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/22/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/22/RI F 0.00160272 2.959405e-05
+V 0/8/457/spectra/0/discrete/22/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/23/ER F 730700.0 300.0
+V 0/8/457/spectra/0/discrete/23/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/23/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/23/RI F 0.0006784 0.0002544805
+V 0/8/457/spectra/0/discrete/23/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/24/ER F 779120.0 220.0
+V 0/8/457/spectra/0/discrete/24/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/24/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/24/RI F 0.00246768 4.837064e-05
+V 0/8/457/spectra/0/discrete/24/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/25/ER F 818680.0 20.0
+V 0/8/457/spectra/0/discrete/25/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/25/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/25/RI F 0.121264 0.001424022
+V 0/8/457/spectra/0/discrete/25/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/25/RICC F 0.00214 4e-05
+V 0/8/457/spectra/0/discrete/25/RICK F 0.00185 4e-05
+V 0/8/457/spectra/0/discrete/25/RICL F 0.00023 4e-06
+V 0/8/457/spectra/0/discrete/26/ER F 830680.0 100.0
+V 0/8/457/spectra/0/discrete/26/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/26/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/26/RI F 0.00028832 5.095265e-05
+V 0/8/457/spectra/0/discrete/26/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/27/ER F 931830.0 40.0
+V 0/8/457/spectra/0/discrete/27/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/27/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/27/RI F 0.00089888 4.323969e-05
+V 0/8/457/spectra/0/discrete/27/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/28/ER F 972600.0 20.0
+V 0/8/457/spectra/0/discrete/28/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/28/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/28/RI F 0.0049608 6.913042e-05
+V 0/8/457/spectra/0/discrete/28/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/29/ER F 1072500.0 200.0
+V 0/8/457/spectra/0/discrete/29/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/29/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/29/RI F 0.00016112 5.09027e-05
+V 0/8/457/spectra/0/discrete/29/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/29/RICC F 0.00226 4e-05
+V 0/8/457/spectra/0/discrete/29/RICK F 0.00194 3e-05
+V 0/8/457/spectra/0/discrete/29/RICL F 0.000255 4e-06
+V 0/8/457/spectra/0/discrete/30/ER F 1097280.0 20.0
+V 0/8/457/spectra/0/discrete/30/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/30/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/30/RI F 0.58512 0.008105954
+V 0/8/457/spectra/0/discrete/30/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/30/RICC F 0.00105 1.5e-05
+V 0/8/457/spectra/0/discrete/30/RICK F 0.000913 1.3e-05
+V 0/8/457/spectra/0/discrete/30/RICL F 0.0001112 1.6e-06
+V 0/8/457/spectra/0/discrete/31/ER F 1235490.0 30.0
+V 0/8/457/spectra/0/discrete/31/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/31/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/31/RI F 5.088e-05 2.544453e-05
+V 0/8/457/spectra/0/discrete/31/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/32/ER F 1293560.0 20.0
+V 0/8/457/spectra/0/discrete/32/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/32/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/32/RI F 0.848 0.01165806
+V 0/8/457/spectra/0/discrete/32/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/32/RICC F 0.000766 1.1e-05
+V 0/8/457/spectra/0/discrete/32/RICK F 0.000648 9e-06
+V 0/8/457/spectra/0/discrete/32/RICL F 7.79e-05 1.1e-06
+V 0/8/457/spectra/0/discrete/33/ER F 1356360.0 230.0
+V 0/8/457/spectra/0/discrete/33/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/33/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/33/RI F 7.8864e-05 1.104908e-05
+V 0/8/457/spectra/0/discrete/33/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/34/ER F 1507590.0 20.0
+V 0/8/457/spectra/0/discrete/34/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/34/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/34/RI F 0.099216 0.001263012
+V 0/8/457/spectra/0/discrete/34/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/34/RICC F 0.000631 9e-06
+V 0/8/457/spectra/0/discrete/34/RICK F 0.000477 7e-06
+V 0/8/457/spectra/0/discrete/34/RICL F 5.69e-05 8e-07
+V 0/8/457/spectra/0/discrete/35/ER F 1752500.0 20.0
+V 0/8/457/spectra/0/discrete/35/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/35/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/35/RI F 0.0235744 0.000337907
+V 0/8/457/spectra/0/discrete/35/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/35/RICC F 0.000594 9e-06
+V 0/8/457/spectra/0/discrete/35/RICK F 0.000358 5e-06
+V 0/8/457/spectra/0/discrete/35/RICL F 4.23e-05 6e-07
+V 0/8/457/spectra/0/discrete/36/ER F 1803430.0 230.0
+V 0/8/457/spectra/0/discrete/36/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/36/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/36/RI F 8.904e-05 1.698079e-05
+V 0/8/457/spectra/0/discrete/36/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/37/ER F 2112290.0 20.0
+V 0/8/457/spectra/0/discrete/37/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/37/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/37/RI F 0.150944 0.002214541
+V 0/8/457/spectra/0/discrete/37/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/37/RICC F 0.000644 9e-06
+V 0/8/457/spectra/0/discrete/37/RICK F 0.000253 4e-06
+V 0/8/457/spectra/0/discrete/37/RICL F 2.97e-05 5e-07
+V 0/8/457/spectra/0/discrete/38/ER F 2225390.0 30.0
+V 0/8/457/spectra/0/discrete/38/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/38/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/38/RI F 0.0004664 1.752146e-05
+V 0/8/457/spectra/0/discrete/38/RIS F 0.0 0.0
+V 0/8/457/spectra/0/discrete/39/ER F 2265690.0 210.0
+V 0/8/457/spectra/0/discrete/39/RTYP F 1.0
+V 0/8/457/spectra/0/discrete/39/TYPE F 0.0
+V 0/8/457/spectra/0/discrete/39/RI F 3.0528e-05 5.096144e-06
+V 0/8/457/spectra/0/discrete/39/RIS F 0.0 0.0
+V 0/8/457/spectra/1/STYP F 1.0
+V 0/8/457/spectra/1/LCON I 0
+V 0/8/457/spectra/1/LCOV I 0
+V 0/8/457/spectra/1/NER I 5
+V 0/8/457/spectra/1/FD F 1.0 0.0
+V 0/8/457/spectra/1/ER_AV F 311481.1 2547.09
+V 0/8/457/spectra/1/FC F 0.0 0.0
+V 0/8/457/spectra/1/discrete/0/ER F 309385.0 4000.076
+V 0/8/457/spectra/1/discrete/0/RTYP F 1.0
+V 0/8/457/spectra/1/discrete/0/TYPE F 1.0
+V 0/8/457/spectra/1/discrete/0/RI F 0.0024 0.0003
+V 0/8/457/spectra/1/discrete/1/ER F 360141.1 4000.041
+V 0/8/457/spectra/1/discrete/1/RTYP F 1.0
+V 0/8/457/spectra/1/discrete/1/TYPE F 1.0
+V 0/8/457/spectra/1/discrete/1/RI F 0.0282 0.0004
+V 0/8/457/spectra/1/discrete/2/ER F 605061.1 4000.041
+V 0/8/457/spectra/1/discrete/2/RTYP F 1.0
+V 0/8/457/spectra/1/discrete/2/TYPE F 1.0
+V 0/8/457/spectra/1/discrete/2/RI F 0.103 0.001
+V 0/8/457/spectra/1/discrete/3/ER F 877062.0 4000.037
+V 0/8/457/spectra/1/discrete/3/RTYP F 1.0
+V 0/8/457/spectra/1/discrete/3/TYPE F 1.0
+V 0/8/457/spectra/1/discrete/3/RI F 0.325 0.003
+V 0/8/457/spectra/1/discrete/4/ER F 1015346.0 4000.032
+V 0/8/457/spectra/1/discrete/4/RTYP F 1.0
+V 0/8/457/spectra/1/discrete/4/TYPE F 1.0
+V 0/8/457/spectra/1/discrete/4/RI F 0.542 0.006
+V 0/8/457/spectra/2/STYP F 8.0
+V 0/8/457/spectra/2/LCON I 0
+V 0/8/457/spectra/2/LCOV I 0
+V 0/8/457/spectra/2/NER I 63
+V 0/8/457/spectra/2/FD F 1.0 0.0
+V 0/8/457/spectra/2/ER_AV F 4352.484 39.10475
+V 0/8/457/spectra/2/FC F 0.0 0.0
+V 0/8/457/spectra/2/discrete/0/ER F 124.4272 5.239699
+V 0/8/457/spectra/2/discrete/0/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/0/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/0/RI F 0.01012288 0.0004292359
+V 0/8/457/spectra/2/discrete/1/ER F 268.6215 12.67765
+V 0/8/457/spectra/2/discrete/1/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/1/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/1/RI F 0.001799052 8.160321e-05
+V 0/8/457/spectra/2/discrete/2/ER F 397.4247 17.9244
+V 0/8/457/spectra/2/discrete/2/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/2/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/2/RI F 0.02407175 0.001072231
+V 0/8/457/spectra/2/discrete/3/ER F 2846.676 138.5362
+V 0/8/457/spectra/2/discrete/3/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/3/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/3/RI F 0.009391132 0.0004499339
+V 0/8/457/spectra/2/discrete/4/ER F 3363.172 116.7573
+V 0/8/457/spectra/2/discrete/4/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/4/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/4/RI F 0.002420292 8.427964e-05
+V 0/8/457/spectra/2/discrete/5/ER F 3898.876 158.2982
+V 0/8/457/spectra/2/discrete/5/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/5/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/5/RI F 0.0001604572 6.581687e-06
+V 0/8/457/spectra/2/discrete/6/ER F 20933.49 1553.274
+V 0/8/457/spectra/2/discrete/6/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/6/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/6/RI F 0.001122965 8.279741e-05
+V 0/8/457/spectra/2/discrete/7/ER F 24417.17 1076.264
+V 0/8/457/spectra/2/discrete/7/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/7/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/7/RI F 0.0004783518 2.108297e-05
+V 0/8/457/spectra/2/discrete/8/ER F 27902.85 1259.099
+V 0/8/457/spectra/2/discrete/8/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/8/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/8/RI F 4.884772e-05 2.212512e-06
+V 0/8/457/spectra/2/discrete/9/ER F 70529.91 40.002
+V 0/8/457/spectra/2/discrete/9/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/9/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/9/RI F 0.0002770925 3.007545e-05
+V 0/8/457/spectra/2/discrete/10/ER F 95265.3 40.00113
+V 0/8/457/spectra/2/discrete/10/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/10/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/10/RI F 8.476608e-05 9.194189e-06
+V 0/8/457/spectra/2/discrete/11/ER F 98846.2 40.00113
+V 0/8/457/spectra/2/discrete/11/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/11/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/11/RI F 1.728563e-05 1.877454e-06
+V 0/8/457/spectra/2/discrete/12/ER F 99593.51 40.002
+V 0/8/457/spectra/2/discrete/12/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/12/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/12/RI F 3.060602e-06 3.322672e-07
+V 0/8/457/spectra/2/discrete/13/ER F 99729.0 40.0
+V 0/8/457/spectra/2/discrete/13/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/13/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/13/RI F 1.329664e-07 1.442711e-08
+V 0/8/457/spectra/2/discrete/14/ER F 109089.9 20.004
+V 0/8/457/spectra/2/discrete/14/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/14/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/14/RI F 0.007246669 0.0002111912
+V 0/8/457/spectra/2/discrete/15/ER F 133825.3 20.00225
+V 0/8/457/spectra/2/discrete/15/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/15/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/15/RI F 0.0009206227 2.720296e-05
+V 0/8/457/spectra/2/discrete/16/ER F 137406.2 20.00225
+V 0/8/457/spectra/2/discrete/16/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/16/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/16/RI F 0.0001804273 5.169194e-06
+V 0/8/457/spectra/2/discrete/17/ER F 138153.5 20.004
+V 0/8/457/spectra/2/discrete/17/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/17/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/17/RI F 3.390406e-05 9.685099e-07
+V 0/8/457/spectra/2/discrete/18/ER F 138289.0 20.0
+V 0/8/457/spectra/2/discrete/18/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/18/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/18/RI F 2.939338e-06 8.533646e-08
+V 0/8/457/spectra/2/discrete/19/ER F 326199.9 20.004
+V 0/8/457/spectra/2/discrete/19/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/19/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/19/RI F 0.0001272613 2.637775e-06
+V 0/8/457/spectra/2/discrete/20/ER F 350935.3 20.00225
+V 0/8/457/spectra/2/discrete/20/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/20/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/20/RI F 1.861826e-05 4.036142e-07
+V 0/8/457/spectra/2/discrete/21/ER F 354516.2 20.00225
+V 0/8/457/spectra/2/discrete/21/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/21/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/21/RI F 3.679845e-06 7.512611e-08
+V 0/8/457/spectra/2/discrete/22/ER F 355263.5 20.004
+V 0/8/457/spectra/2/discrete/22/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/22/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/22/RI F 6.790191e-07 1.390402e-08
+V 0/8/457/spectra/2/discrete/23/ER F 355399.0 20.0
+V 0/8/457/spectra/2/discrete/23/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/23/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/23/RI F 5.008678e-08 1.046311e-09
+V 0/8/457/spectra/2/discrete/24/ER F 387699.9 20.004
+V 0/8/457/spectra/2/discrete/24/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/24/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/24/RI F 0.00291807 5.629187e-05
+V 0/8/457/spectra/2/discrete/25/ER F 412435.3 20.00225
+V 0/8/457/spectra/2/discrete/25/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/25/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/25/RI F 0.0004102174 8.095544e-06
+V 0/8/457/spectra/2/discrete/26/ER F 416016.2 20.00225
+V 0/8/457/spectra/2/discrete/26/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/26/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/26/RI F 8.084577e-05 1.733499e-06
+V 0/8/457/spectra/2/discrete/27/ER F 416763.5 20.004
+V 0/8/457/spectra/2/discrete/27/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/27/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/27/RI F 1.497144e-05 2.948704e-07
+V 0/8/457/spectra/2/discrete/28/ER F 416899.0 20.0
+V 0/8/457/spectra/2/discrete/28/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/28/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/28/RI F 1.143274e-06 2.229897e-08
+V 0/8/457/spectra/2/discrete/29/ER F 789479.9 20.004
+V 0/8/457/spectra/2/discrete/29/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/29/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/29/RI F 0.0002243384 5.519802e-06
+V 0/8/457/spectra/2/discrete/30/ER F 814215.2 20.00225
+V 0/8/457/spectra/2/discrete/30/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/30/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/30/RI F 2.789072e-05 5.852795e-07
+V 0/8/457/spectra/2/discrete/31/ER F 817796.2 20.00225
+V 0/8/457/spectra/2/discrete/31/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/31/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/31/RI F 5.444754e-06 1.062712e-07
+V 0/8/457/spectra/2/discrete/32/ER F 818543.5 20.004
+V 0/8/457/spectra/2/discrete/32/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/32/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/32/RI F 1.022256e-06 2.079244e-08
+V 0/8/457/spectra/2/discrete/33/ER F 818679.0 20.0
+V 0/8/457/spectra/2/discrete/33/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/33/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/33/RI F 8.694629e-08 1.878198e-09
+V 0/8/457/spectra/2/discrete/34/ER F 1043300.0 200.0004
+V 0/8/457/spectra/2/discrete/34/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/34/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/34/RI F 3.125728e-07 9.886946e-08
+V 0/8/457/spectra/2/discrete/35/ER F 1068035.0 200.0002
+V 0/8/457/spectra/2/discrete/35/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/35/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/35/RI F 4.10856e-08 1.299618e-08
+V 0/8/457/spectra/2/discrete/36/ER F 1068080.0 20.004
+V 0/8/457/spectra/2/discrete/36/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/36/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/36/RI F 0.0005342146 1.061276e-05
+V 0/8/457/spectra/2/discrete/37/ER F 1071616.0 200.0002
+V 0/8/457/spectra/2/discrete/37/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/37/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/37/RI F 8.088224e-09 2.557803e-09
+V 0/8/457/spectra/2/discrete/38/ER F 1072364.0 200.0004
+V 0/8/457/spectra/2/discrete/38/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/38/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/38/RI F 1.514528e-09 4.79017e-10
+V 0/8/457/spectra/2/discrete/39/ER F 1072499.0 200.0
+V 0/8/457/spectra/2/discrete/39/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/39/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/39/RI F 1.26157e-10 3.98962e-11
+V 0/8/457/spectra/2/discrete/40/ER F 1092815.0 20.00225
+V 0/8/457/spectra/2/discrete/40/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/40/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/40/RI F 6.506535e-05 1.299594e-06
+V 0/8/457/spectra/2/discrete/41/ER F 1096396.0 20.00225
+V 0/8/457/spectra/2/discrete/41/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/41/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/41/RI F 1.26971e-05 2.485024e-07
+V 0/8/457/spectra/2/discrete/42/ER F 1097279.0 20.0
+V 0/8/457/spectra/2/discrete/42/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/42/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/42/RI F 2.04792e-07 4.075314e-09
+V 0/8/457/spectra/2/discrete/43/ER F 1264360.0 20.004
+V 0/8/457/spectra/2/discrete/43/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/43/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/43/RI F 0.000549504 1.073856e-05
+V 0/8/457/spectra/2/discrete/44/ER F 1289095.0 20.00225
+V 0/8/457/spectra/2/discrete/44/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/44/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/44/RI F 6.60592e-05 1.301874e-06
+V 0/8/457/spectra/2/discrete/45/ER F 1292676.0 20.00225
+V 0/8/457/spectra/2/discrete/45/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/45/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/45/RI F 1.28896e-05 2.573041e-07
+V 0/8/457/spectra/2/discrete/46/ER F 1293559.0 20.0
+V 0/8/457/spectra/2/discrete/46/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/46/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/46/RI F 2.09456e-07 4.449429e-09
+V 0/8/457/spectra/2/discrete/47/ER F 1478390.0 20.004
+V 0/8/457/spectra/2/discrete/47/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/47/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/47/RI F 4.732603e-05 9.194026e-07
+V 0/8/457/spectra/2/discrete/48/ER F 1503125.0 20.00225
+V 0/8/457/spectra/2/discrete/48/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/48/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/48/RI F 5.64539e-06 1.070732e-07
+V 0/8/457/spectra/2/discrete/49/ER F 1506706.0 20.00225
+V 0/8/457/spectra/2/discrete/49/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/49/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/49/RI F 1.100305e-06 2.117055e-08
+V 0/8/457/spectra/2/discrete/50/ER F 1507454.0 20.004
+V 0/8/457/spectra/2/discrete/50/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/50/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/50/RI F 2.073614e-07 3.97837e-09
+V 0/8/457/spectra/2/discrete/51/ER F 1507589.0 20.0
+V 0/8/457/spectra/2/discrete/51/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/51/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/51/RI F 1.805731e-08 3.76077e-10
+V 0/8/457/spectra/2/discrete/52/ER F 1723300.0 20.004
+V 0/8/457/spectra/2/discrete/52/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/52/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/52/RI F 8.439635e-06 1.689015e-07
+V 0/8/457/spectra/2/discrete/53/ER F 1727870.0 210.0004
+V 0/8/457/spectra/2/discrete/53/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/53/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/53/RI F 3.4e-05 6.8e-06
+V 0/8/457/spectra/2/discrete/54/ER F 1748035.0 20.00225
+V 0/8/457/spectra/2/discrete/54/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/54/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/54/RI F 9.971971e-07 2.010905e-08
+V 0/8/457/spectra/2/discrete/55/ER F 1751616.0 20.00225
+V 0/8/457/spectra/2/discrete/55/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/55/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/55/RI F 1.942531e-07 3.969314e-09
+V 0/8/457/spectra/2/discrete/56/ER F 1752364.0 20.004
+V 0/8/457/spectra/2/discrete/56/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/56/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/56/RI F 3.658747e-08 7.37572e-10
+V 0/8/457/spectra/2/discrete/57/ER F 1752499.0 20.0
+V 0/8/457/spectra/2/discrete/57/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/57/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/57/RI F 3.196689e-09 6.40762e-11
+V 0/8/457/spectra/2/discrete/58/ER F 2083090.0 20.004
+V 0/8/457/spectra/2/discrete/58/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/58/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/58/RI F 3.818883e-05 8.236856e-07
+V 0/8/457/spectra/2/discrete/59/ER F 2107826.0 20.00225
+V 0/8/457/spectra/2/discrete/59/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/59/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/59/RI F 4.483037e-06 1.001097e-07
+V 0/8/457/spectra/2/discrete/60/ER F 2111406.0 20.00225
+V 0/8/457/spectra/2/discrete/60/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/60/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/60/RI F 8.739658e-07 1.868046e-08
+V 0/8/457/spectra/2/discrete/61/ER F 2112154.0 20.004
+V 0/8/457/spectra/2/discrete/61/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/61/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/61/RI F 1.646799e-07 3.416152e-09
+V 0/8/457/spectra/2/discrete/62/ER F 2112289.0 20.0
+V 0/8/457/spectra/2/discrete/62/RTYP F 1.0
+V 0/8/457/spectra/2/discrete/62/TYPE F 0.0
+V 0/8/457/spectra/2/discrete/62/RI F 1.446043e-08 2.99442e-10
+V 0/8/457/spectra/3/STYP F 9.0
+V 0/8/457/spectra/3/LCON I 0
+V 0/8/457/spectra/3/LCOV I 0
+V 0/8/457/spectra/3/NER I 14
+V 0/8/457/spectra/3/FD F 1.0 0.0
+V 0/8/457/spectra/3/ER_AV F 270.0389 16.60746
+V 0/8/457/spectra/3/FC F 0.0 0.0
+V 0/8/457/spectra/3/discrete/0/ER F 3090.658 297.8856
+V 0/8/457/spectra/3/discrete/0/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/0/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/0/RI F 7.072769e-05 6.823541e-06
+V 0/8/457/spectra/3/discrete/1/ER F 3431.273 378.7496
+V 0/8/457/spectra/3/discrete/1/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/1/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/1/RI F 0.0004767707 5.243758e-05
+V 0/8/457/spectra/3/discrete/2/ER F 3705.107 313.9767
+V 0/8/457/spectra/3/discrete/2/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/2/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/2/RI F 0.0003668766 3.129989e-05
+V 0/8/457/spectra/3/discrete/3/ER F 4182.796 358.3392
+V 0/8/457/spectra/3/discrete/3/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/3/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/3/RI F 4.378534e-05 3.77788e-06
+V 0/8/457/spectra/3/discrete/4/ER F 25023.2 250.232
+V 0/8/457/spectra/3/discrete/4/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/4/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/4/RI F 0.002979554 0.0003029964
+V 0/8/457/spectra/3/discrete/5/ER F 25257.2 252.572
+V 0/8/457/spectra/3/discrete/5/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/5/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/5/RI F 0.005574887 0.0005669207
+V 0/8/457/spectra/3/discrete/6/ER F 28430.6 284.306
+V 0/8/457/spectra/3/discrete/6/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/6/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/6/RI F 0.0005029725 5.114822e-05
+V 0/8/457/spectra/3/discrete/7/ER F 28473.7 284.737
+V 0/8/457/spectra/3/discrete/7/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/7/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/7/RI F 0.0009766166 9.931398e-05
+V 0/8/457/spectra/3/discrete/8/ER F 28680.4 286.804
+V 0/8/457/spectra/3/discrete/8/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/8/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/8/RI F 4.03669e-06 4.104986e-07
+V 0/8/457/spectra/3/discrete/9/ER F 28689.4 286.894
+V 0/8/457/spectra/3/discrete/9/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/9/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/9/RI F 5.584689e-06 5.679175e-07
+V 0/8/457/spectra/3/discrete/10/ER F 29080.4 290.804
+V 0/8/457/spectra/3/discrete/10/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/10/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/10/RI F 0.0001030707 1.048145e-05
+V 0/8/457/spectra/3/discrete/11/ER F 29088.2 290.882
+V 0/8/457/spectra/3/discrete/11/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/11/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/11/RI F 0.0002013008 2.047066e-05
+V 0/8/457/spectra/3/discrete/12/ER F 29150.5 291.505
+V 0/8/457/spectra/3/discrete/12/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/12/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/12/RI F 5.972857e-07 6.07391e-08
+V 0/8/457/spectra/3/discrete/13/ER F 29151.6 291.516
+V 0/8/457/spectra/3/discrete/13/RTYP F 1.0
+V 0/8/457/spectra/3/discrete/13/TYPE F 0.0
+V 0/8/457/spectra/3/discrete/13/RI F 8.213495e-07 8.352457e-08
+V 0/production/mts I 
