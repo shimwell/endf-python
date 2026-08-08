@@ -803,6 +803,20 @@ fn dump_angle_energy(d: &mut Dump, p: &str, ae: &AngleEnergy) {
     }
 }
 
+/// Mirrors `dump_ace_reactions` in `tools/dump_golden.py`.
+fn dump_ace_reactions(d: &mut Dump, path: &str, t: &ace::Table) {
+    // MTR (JXS(3)) lists the reactions; without it there are none to read.
+    if t.data_type().ok() != Some(ace::TableType::NeutronContinuous) || t.jxs[3] <= 0 {
+        return;
+    }
+    let n = t.nxs[4];
+    d.int(format!("{path}/n"), n);
+    for i_reaction in 0..=n {
+        let rx = endf::Reaction::from_ace(t, i_reaction).unwrap();
+        dump_reaction(d, &format!("{path}/{i_reaction}"), &rx);
+    }
+}
+
 /// Mirrors `dump_ace_dlw` in `tools/dump_golden.py`.
 fn dump_ace_dlw(d: &mut Dump, path: &str, t: &ace::Table) {
     if t.data_type().ok() != Some(ace::TableType::NeutronContinuous) {
@@ -908,6 +922,7 @@ fn dump_ace_table(d: &mut Dump, path: &str, t: &ace::Table) {
 
     dump_ace_angle(d, &format!("{path}/and"), t);
     dump_ace_dlw(d, &format!("{path}/dlw"), t);
+    dump_ace_reactions(d, &format!("{path}/reaction"), t);
 
     // The unresolved resonance block, when the table has one.
     if let Some(urr) = endf::urr::ProbabilityTables::from_ace(t) {

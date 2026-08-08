@@ -7,15 +7,17 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
+use crate::ace::Table;
 use crate::angle_energy::{AngleEnergy, UncorrelatedAngleEnergy};
-use crate::data::{gnds_name, ATOMIC_SYMBOL};
+use crate::data::{gnds_name, temperature_str, ATOMIC_SYMBOL, EV_PER_MEV};
 use crate::error::{Error, Result};
 use crate::function::{Polynomial, Tabulated1D};
 use crate::material::Material;
 use crate::mf::mf1::Nu;
-use crate::mf::mf4::AngleDistribution;
+use crate::mf::mf4::{AngleAtEnergy, AngleDistribution};
 use crate::mf::mf5::EnergyDistribution;
 use crate::product::{EmissionMode, Product, Yield};
+use crate::univariate::Uniform;
 
 /// The MT numbers that mean fission.
 pub const FISSION_MTS: [i32; 5] = [18, 19, 20, 21, 38];
@@ -601,6 +603,430 @@ fn activation_products(material: &Material, mt: i32, xs: &Tabulated1D) -> Vec<Pr
     products
 }
 
+impl Reaction {
+    /// Read one reaction from an ACE table.
+    ///
+    /// `i_reaction` indexes the table's reaction list; index 0 is elastic
+    /// scattering, which the format stores apart from the rest.
+    pub fn from_ace(table: &Table, i_reaction: i64) -> Result<Reaction> {
+        let xss = &table.xss;
+        let at = |i: i64| -> f64 {
+            usize::try_from(i)
+                .ok()
+                .and_then(|i| xss.get(i).copied())
+                .unwrap_or(0.0)
+        };
+        let slice = |i: i64, n: usize| -> Vec<f64> { (0..n as i64).map(|k| at(i + k)).collect() };
+
+        // The nuclide's own energy grid, which the cross sections index into.
+        let n_grid = table.nxs[3].max(0) as usize;
+        let grid: Vec<f64> = slice(table.jxs[1], n_grid)
+            .into_iter()
+            .map(|e| e * EV_PER_MEV)
+            .collect();
+
+        // `Table::temperature` is in kelvin; the raw kT in the file is in MeV.
+        let temperature = temperature_str(table.temperature());
+
+        let mut rx;
+        // Which product the angular distribution belongs to, once one is read.
+        let mut neutron: Option<usize> = None;
+
+        if i_reaction > 0 {
+            let mt = at(table.jxs[3] + i_reaction - 1) as i32;
+            rx = Reaction::new(mt);
+            rx.q_reaction = at(table.jxs[4] + i_reaction - 1) * EV_PER_MEV;
+
+            // The cross section, which starts at a threshold rather than at
+            // the bottom of the grid.
+            let loc = at(table.jxs[6] + i_reaction - 1) as i64;
+            // The stored index is one-based into the nuclide energy grid.
+            let threshold_idx = (at(table.jxs[7] + loc - 1) as i64 - 1).max(0) as usize;
+            let n_energy = at(table.jxs[7] + loc).max(0.0) as usize;
+            let energy = grid
+                .get(threshold_idx..(threshold_idx + n_energy).min(grid.len()))
+                .unwrap_or_default()
+                .to_vec();
+            let mut sigma = slice(table.jxs[7] + loc + 1, n_energy);
+
+            // Damage energy production is stored in MeV.
+            if mt == 444 {
+                for v in &mut sigma {
+                    *v *= EV_PER_MEV;
+                }
+            }
+            // Processed files occasionally carry a small negative cross
+            // section, which is a processing artefact rather than physics.
+            // The Python reader warns and zeroes; this zeroes.
+            for v in &mut sigma {
+                if *v < 0.0 {
+                    *v = 0.0;
+                }
+            }
+            rx.xs
+                .insert(temperature.clone(), Tabulated1D::new(energy, sigma));
+
+            // TY is the multiplicity, and its sign records the frame.
+            let ty = at(table.jxs[5] + i_reaction - 1) as i64;
+            rx.center_of_mass = ty < 0;
+
+            if i_reaction < table.nxs[5] + 1 {
+                if ty != 19 {
+                    let yield_ = if ty.abs() > 100 {
+                        // An energy-dependent yield, stored in DLW.
+                        Yield::Tabulated(Tabulated1D::from_ace(
+                            xss,
+                            (table.jxs[11] + ty.abs() - 101).max(0) as usize,
+                            true,
+                        ))
+                    } else {
+                        Yield::Polynomial(Polynomial::new(vec![ty.abs() as f64]))
+                    };
+                    rx.products.push(Product {
+                        name: "neutron".to_string(),
+                        yield_,
+                        ..Default::default()
+                    });
+                    neutron = Some(rx.products.len() - 1);
+                } else {
+                    // TY = 19 means fission, whose neutrons come from the NU
+                    // block rather than from a multiplicity.
+                    let (products, derived) = fission_products_ace(table)?;
+                    rx.products = products;
+                    rx.derived_products = derived;
+                    neutron = rx.products.iter().position(|p| {
+                        matches!(p.emission_mode, EmissionMode::Prompt | EmissionMode::Total)
+                    });
+                    if neutron.is_none() {
+                        return Err(Error::BadAceTable {
+                            what: "a fission reaction with no prompt or total neutron".into(),
+                        });
+                    }
+                }
+
+                // DLW is a linked list: each entry's first word points at the
+                // next distribution for this reaction.
+                let i = neutron.expect("set on both branches above");
+                let mut lnw = at(table.jxs[10] + i_reaction - 1) as i64;
+                while lnw > 0 {
+                    rx.products[i].applicability.push(Tabulated1D::from_ace(
+                        xss,
+                        (table.jxs[11] + lnw + 2).max(0) as usize,
+                        true,
+                    ));
+                    let dist =
+                        AngleEnergy::from_ace(table, table.jxs[11], lnw, Some(rx.q_reaction))?;
+                    rx.products[i].distribution.push(dist);
+                    lnw = at(table.jxs[11] + lnw - 1) as i64;
+                }
+            }
+        } else {
+            // Elastic scattering, whose cross section is the fourth column of
+            // the main energy block.
+            rx = Reaction::new(2);
+            let mut elastic = slice(table.jxs[1] + 3 * n_grid as i64, n_grid);
+            for v in &mut elastic {
+                if *v < 0.0 {
+                    *v = 0.0;
+                }
+            }
+            rx.xs
+                .insert(temperature.clone(), Tabulated1D::new(grid.clone(), elastic));
+
+            // No energy distribution is given: it follows from the kinematics.
+            rx.products.push(Product {
+                name: "neutron".to_string(),
+                distribution: vec![AngleEnergy::Uncorrelated(UncorrelatedAngleEnergy::default())],
+                ..Default::default()
+            });
+            neutron = Some(0);
+        }
+
+        // The angular distribution, for the uncorrelated laws. A negative
+        // locator means the angle is bound up with the energy in DLW instead,
+        // which is why this only ever writes onto an uncorrelated
+        // distribution.
+        if i_reaction < table.nxs[5] + 1 {
+            let loc = at(table.jxs[8] + i_reaction) as i64;
+            let angle = match loc {
+                l if l < 0 => None,
+                0 => Some(isotropic_angle(0.0, grid.last().copied().unwrap_or(0.0))),
+                l => Some(AngleDistribution::from_ace(table, table.jxs[9], l)?),
+            };
+            if let (Some(angle), Some(i)) = (angle, neutron) {
+                for dist in &mut rx.products[i].distribution {
+                    if let AngleEnergy::Uncorrelated(u) = dist {
+                        u.angle = Some(angle.clone());
+                    }
+                }
+            }
+        }
+
+        rx.products.extend(photon_products_ace(table, &rx)?);
+        Ok(rx)
+    }
+}
+
+/// An isotropic angular distribution spanning an energy range.
+fn isotropic_angle(energy_low: f64, energy_high: f64) -> AngleDistribution {
+    let mu = AngleAtEnergy::Isotropic(Uniform::new(-1.0, 1.0));
+    AngleDistribution {
+        energy: vec![energy_low, energy_high],
+        mu: vec![mu.clone(), mu],
+    }
+}
+
+/// A nu-bar in an ACE NU block, in whichever of the two forms it uses.
+fn read_nu_ace(table: &Table, idx: i64) -> Yield {
+    let at = |i: i64| -> f64 {
+        usize::try_from(i)
+            .ok()
+            .and_then(|i| table.xss.get(i).copied())
+            .unwrap_or(0.0)
+    };
+    if at(idx) as i64 == 1 {
+        let nc = at(idx + 1) as usize;
+        // The coefficients are per MeV of incident energy, so the term of
+        // degree i converts by that power.
+        let coefficients = (0..nc)
+            .map(|i| at(idx + 2 + i as i64) * EV_PER_MEV.powi(-(i as i32)))
+            .collect();
+        Yield::Polynomial(Polynomial::new(coefficients))
+    } else {
+        Yield::Tabulated(Tabulated1D::from_ace(
+            &table.xss,
+            (idx + 1).max(0) as usize,
+            true,
+        ))
+    }
+}
+
+/// The fission neutrons of an ACE table: prompt, total and delayed.
+fn fission_products_ace(table: &Table) -> Result<(Vec<Product>, Vec<Product>)> {
+    let xss = &table.xss;
+    let at = |i: i64| -> f64 {
+        usize::try_from(i)
+            .ok()
+            .and_then(|i| xss.get(i).copied())
+            .unwrap_or(0.0)
+    };
+
+    let mut products: Vec<Product> = Vec::new();
+    let mut derived_products: Vec<Product> = Vec::new();
+
+    // No NU block at all.
+    if table.jxs[2] == 0 {
+        return Ok((products, derived_products));
+    }
+
+    let first = at(table.jxs[2]);
+    if first > 0.0 {
+        // One of prompt and total is given, and which it is depends on
+        // whether the delayed block exists.
+        products.push(Product {
+            name: "neutron".to_string(),
+            emission_mode: if table.jxs[24] > 0 {
+                EmissionMode::Prompt
+            } else {
+                EmissionMode::Total
+            },
+            yield_: read_nu_ace(table, table.jxs[2]),
+            ..Default::default()
+        });
+    } else if first < 0.0 {
+        // Both are given, one after the other.
+        products.push(Product {
+            name: "neutron".to_string(),
+            emission_mode: EmissionMode::Prompt,
+            yield_: read_nu_ace(table, table.jxs[2] + 1),
+            ..Default::default()
+        });
+        derived_products.push(Product {
+            name: "neutron".to_string(),
+            emission_mode: EmissionMode::Total,
+            yield_: read_nu_ace(table, table.jxs[2] + first.abs() as i64 + 1),
+            ..Default::default()
+        });
+    }
+
+    if table.jxs[24] <= 0 {
+        return Ok((products, derived_products));
+    }
+
+    let yield_delayed = Tabulated1D::from_ace(xss, (table.jxs[24] + 1).max(0) as usize, true);
+    let mut idx = table.jxs[25];
+    let n_group = table.nxs[8].max(0);
+    let mut total_group_probability = 0.0;
+
+    for group in 0..n_group {
+        // Decay constants are stored in inverse shakes.
+        let decay_rate = at(idx) * 1.0e8;
+        let probability = Tabulated1D::from_ace(xss, (idx + 1).max(0) as usize, true);
+
+        let yield_ = if probability.y.iter().all(|&v| v == probability.y[0]) {
+            let mut y = yield_delayed.clone();
+            let share = probability.y[0];
+            for v in &mut y.y {
+                *v *= share;
+            }
+            total_group_probability += share;
+            y
+        } else {
+            // Neither grid contains the other, so the product is taken on
+            // their union, cut where one of them runs out.
+            let max_energy = yield_delayed.x[yield_delayed.x.len() - 1]
+                .min(probability.x[probability.x.len() - 1]);
+            let mut energy: Vec<f64> = yield_delayed
+                .x
+                .iter()
+                .chain(&probability.x)
+                .copied()
+                .collect();
+            energy.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            energy.dedup();
+            energy.retain(|&e| e <= max_energy);
+            let y: Vec<f64> = energy
+                .iter()
+                .map(|&e| yield_delayed.eval(e) * probability.eval(e))
+                .collect();
+            Tabulated1D::new(energy, y)
+        };
+
+        // Step past this group's probability record.
+        let nr = at(idx + 1) as i64;
+        let ne = at(idx + 2 + 2 * nr) as i64;
+        idx += 3 + 2 * nr + 2 * ne;
+
+        let location_start = at(table.jxs[26] + group) as i64;
+        // No Q value is passed: the Python reader passes no reaction here
+        // either, so law 66 would fail in both. It does not arise — a delayed
+        // neutron spectrum is never N-body phase space.
+        let distribution = AngleEnergy::from_ace(table, table.jxs[27], location_start, None)?;
+
+        products.push(Product {
+            name: "neutron".to_string(),
+            emission_mode: EmissionMode::Delayed,
+            decay_rate,
+            yield_: Yield::Tabulated(yield_),
+            distribution: vec![distribution],
+            ..Default::default()
+        });
+    }
+
+    // The group probabilities in an ACE file do not sum to exactly one, so the
+    // delayed yields are renormalised against what they do sum to.
+    if total_group_probability > 0.0 {
+        for product in products.iter_mut().skip(1) {
+            if let Yield::Tabulated(y) = &mut product.yield_ {
+                for v in &mut y.y {
+                    *v /= total_group_probability;
+                }
+            }
+        }
+    }
+
+    Ok((products, derived_products))
+}
+
+/// The photons a reaction produces, from the ACE photon production blocks.
+fn photon_products_ace(table: &Table, rx: &Reaction) -> Result<Vec<Product>> {
+    let xss = &table.xss;
+    let at = |i: i64| -> f64 {
+        usize::try_from(i)
+            .ok()
+            .and_then(|i| xss.get(i).copied())
+            .unwrap_or(0.0)
+    };
+    let slice = |i: i64, n: usize| -> Vec<f64> { (0..n as i64).map(|k| at(i + k)).collect() };
+
+    let n_photon_reactions = table.nxs[6].max(0);
+    let mut photons = Vec::new();
+    for i in 0..n_photon_reactions {
+        // The photon MT encodes the neutron reaction it belongs to.
+        let photon_mt = at(table.jxs[13] + i) as i64;
+        if (photon_mt / 1000) as i32 != rx.mt {
+            continue;
+        }
+
+        // Either a yield or a production cross section, depending on which
+        // ENDF file the processing took it from.
+        let loca = at(table.jxs[14] + i) as i64;
+        let idx = table.jxs[15] + loca - 1;
+        let mftype = at(idx) as i64;
+        let idx = idx + 1;
+
+        let yield_ = match mftype {
+            12 | 16 => Tabulated1D::from_ace(xss, (idx + 1).max(0) as usize, true),
+            13 => {
+                // A production cross section, which becomes a yield once
+                // divided by the reaction's own.
+                let threshold_idx = at(idx) as i64 - 1;
+                let n_energy = at(idx + 1) as usize;
+                let energy: Vec<f64> = slice(table.jxs[1] + threshold_idx, n_energy)
+                    .into_iter()
+                    .map(|e| e * EV_PER_MEV)
+                    .collect();
+                let production = slice(idx + 2, n_energy);
+                let neutron_xs = rx.xs.values().next().ok_or(Error::BadAceTable {
+                    what: "a photon production cross section with no reaction to divide by".into(),
+                })?;
+                let y: Vec<f64> = energy
+                    .iter()
+                    .zip(&production)
+                    .map(|(&e, &p)| {
+                        let n = neutron_xs.eval(e);
+                        if n > 0.0 {
+                            p / n
+                        } else {
+                            0.0
+                        }
+                    })
+                    .collect();
+                Tabulated1D::new(energy, y)
+            }
+            _ => {
+                return Err(Error::BadAceTable {
+                    what: format!("photon production MFTYPE {mftype}, expected 12, 13 or 16"),
+                })
+            }
+        };
+
+        let location_start = at(table.jxs[18] + i) as i64;
+        // As with the delayed spectra, no Q value: photon production is never
+        // given as N-body phase space, and the Python reader passes none.
+        let mut distribution = AngleEnergy::from_ace(table, table.jxs[19], location_start, None)?;
+
+        // The angular distribution, which is separate for photons.
+        let loc = at(table.jxs[16] + i) as i64;
+        let angle = if loc == 0 {
+            // Nothing given, so isotropic in the laboratory frame across the
+            // range the yield covers.
+            isotropic_angle(
+                yield_.x.first().copied().unwrap_or(0.0),
+                yield_.x.last().copied().unwrap_or(0.0),
+            )
+        } else {
+            AngleDistribution::from_ace(table, table.jxs[17], loc)?
+        };
+        match &mut distribution {
+            AngleEnergy::Uncorrelated(u) => u.angle = Some(angle),
+            _ => {
+                return Err(Error::BadAceTable {
+                    what: "a photon distribution that is not uncorrelated".into(),
+                })
+            }
+        }
+
+        photons.push(Product {
+            name: "photon".to_string(),
+            yield_: Yield::Tabulated(yield_),
+            distribution: vec![distribution],
+            ..Default::default()
+        });
+    }
+    Ok(photons)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -792,5 +1218,112 @@ mod tests {
     fn a_reaction_with_no_cross_section_is_refused() {
         let m = Material::from_str(AM244).unwrap();
         assert!(Reaction::from_endf(999, &m).is_err());
+    }
+}
+
+#[cfg(test)]
+mod ace_tests {
+    use super::*;
+    use crate::ace;
+
+    fn li6() -> ace::Table {
+        ace::get_tables("../../tests/Li6.ace").unwrap().remove(0)
+    }
+
+    #[test]
+    fn elastic_scattering_is_index_zero() {
+        let t = li6();
+        let rx = Reaction::from_ace(&t, 0).unwrap();
+        assert_eq!(rx.mt, 2);
+        assert_eq!(rx.name().as_deref(), Some("(n,elastic)"));
+
+        // Its cross section spans the whole grid, unlike a threshold reaction.
+        let xs = rx.xs.values().next().unwrap();
+        assert_eq!(xs.x.len(), t.nxs[3] as usize);
+        assert!(xs.y.iter().all(|&v| v >= 0.0));
+        // The temperature keys the table, and it is the file's own.
+        assert_eq!(
+            rx.xs.keys().next().unwrap(),
+            &crate::data::temperature_str(t.temperature())
+        );
+
+        // One neutron, with an angular distribution but no energy one: the
+        // outgoing energy follows from the kinematics.
+        assert_eq!(rx.products.len(), 1);
+        let AngleEnergy::Uncorrelated(u) = &rx.products[0].distribution[0] else {
+            panic!("elastic scattering is uncorrelated");
+        };
+        assert!(u.angle.is_some());
+        assert!(u.energy.is_none());
+    }
+
+    #[test]
+    fn a_threshold_reaction_starts_where_it_opens() {
+        let t = li6();
+        // Index 2 is MT=51, the first inelastic level.
+        let rx = Reaction::from_ace(&t, 2).unwrap();
+        assert_eq!(rx.mt, 51);
+        assert!(rx.q_reaction < 0.0, "an inelastic level costs energy");
+
+        let xs = rx.xs.values().next().unwrap();
+        assert!(xs.x.len() < t.nxs[3] as usize);
+        // It opens above the threshold the Q value implies.
+        assert!(xs.x[0] > rx.q_reaction.abs());
+    }
+
+    #[test]
+    fn a_constant_multiplicity_becomes_a_polynomial_yield() {
+        let t = li6();
+        let rx = Reaction::from_ace(&t, 2).unwrap();
+        let neutron = rx.products.iter().find(|p| p.name == "neutron").unwrap();
+        // TY = 1 for a level reaction: one neutron out, whatever the energy.
+        assert_eq!(
+            neutron.yield_,
+            Yield::Polynomial(Polynomial::new(vec![1.0]))
+        );
+        assert_eq!(neutron.yield_.eval(1.0e6), 1.0);
+    }
+
+    #[test]
+    fn every_reaction_in_the_table_reads() {
+        let t = li6();
+        let mts: Vec<i32> = (0..=t.nxs[4])
+            .map(|i| Reaction::from_ace(&t, i).unwrap().mt)
+            .collect();
+        // Elastic first, then the reactions MTR lists, in its order.
+        assert_eq!(mts[0], 2);
+        assert_eq!(
+            mts[1..],
+            (1..=t.nxs[4])
+                .map(|i| t.xss[(t.jxs[3] + i - 1) as usize] as i32)
+                .collect::<Vec<_>>()
+        );
+        // Li6 has no fission, so nothing is a derived product.
+        assert!((0..=t.nxs[4]).all(|i| Reaction::from_ace(&t, i)
+            .unwrap()
+            .derived_products
+            .is_empty()));
+    }
+
+    #[test]
+    fn photon_production_is_attached_to_the_reaction_that_makes_it() {
+        let t = li6();
+        let mut photons = 0;
+        for i in 0..=t.nxs[4] {
+            let rx = Reaction::from_ace(&t, i).unwrap();
+            for photon in rx.products.iter().filter(|p| p.name == "photon") {
+                photons += 1;
+                // A photon always carries a distribution, and the angle is
+                // filled in even when the file gives none.
+                let AngleEnergy::Uncorrelated(u) = &photon.distribution[0] else {
+                    panic!("photon production is uncorrelated");
+                };
+                assert!(u.angle.is_some());
+                assert!(u.energy.is_some());
+            }
+        }
+        // NXS(6) counts the photon production reactions, and each belongs to
+        // exactly one neutron reaction.
+        assert_eq!(photons, t.nxs[6] as usize);
     }
 }

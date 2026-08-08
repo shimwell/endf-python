@@ -1057,6 +1057,21 @@ def dump_ace_dlw(d: Dump, path: str, table) -> None:
         d.ints(f"{rp}/chain", chain)
 
 
+def dump_ace_reactions(d: Dump, path: str, table) -> None:
+    """Every reaction an ACE neutron table holds, index 0 being elastic."""
+    from endf.ace import TableType
+    from endf.reaction import Reaction
+
+    # MTR (JXS(3)) lists the reactions; without it there are none to read.
+    if table.data_type != TableType.NEUTRON_CONTINUOUS or table.jxs[3] <= 0:
+        return
+    n = int(table.nxs[4])
+    d.int(f"{path}/n", n)
+    for i_reaction in range(n + 1):
+        rx = Reaction.from_ace(table, i_reaction)
+        dump_reaction(d, f"{path}/{i_reaction}", rx, rx.derived_products)
+
+
 def dump_ace(d: Dump, path: str, table) -> None:
     d.text(f"{path}/name", table.name)
     d.float(f"{path}/atomic_weight_ratio", table.atomic_weight_ratio)
@@ -1076,6 +1091,7 @@ def dump_ace(d: Dump, path: str, table) -> None:
 
     dump_ace_angle(d, f"{path}/and", table)
     dump_ace_dlw(d, f"{path}/dlw", table)
+    dump_ace_reactions(d, f"{path}/reaction", table)
 
     # The unresolved resonance block, when the table has one.
     from endf.urr import ProbabilityTables

@@ -15,11 +15,12 @@ golden opens with `KIND ace` and the Rust side reads it through
 the dump records a spread across it plus both ends and every JXS entry point,
 which is where a consumer actually looks. Everything else is recorded in full.
 
-On top of the raw arrays, the ACE dump walks the two blocks a transport code
-reads: every locator in AND (the angular distributions) and the whole of DLW
-(the joint angle-energy distributions, following the linked list each reaction
-carries). That turns the ACE fixtures into a check on the interpretation, not
-only on the numbers.
+On top of the raw arrays, the ACE dump walks the blocks a transport code
+reads: every locator in AND (the angular distributions), the whole of DLW (the
+joint angle-energy distributions, following the linked list each reaction
+carries), and every reaction the table holds, elastic scattering included.
+That turns the ACE fixtures into a check on the interpretation, not only on the
+numbers.
 
 ## Adding an evaluation
 
@@ -97,7 +98,7 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 | `tsl-s-CH4` | MF7 MT=2 and MT=4 |
 | `dec-049_In_116m1` | MF8 MT=457 decay data: four spectra, beta- only |
 | `dec-049_In_116m2` | MF8 MT=457 decay data: an isomeric transition down to m1 |
-| `Li6.ace` | An ACE Type 1 table; AND in all three shapes, DLW laws 3, 33 and 44 |
+| `Li6.ace` | An ACE Type 1 table; AND in all three shapes, DLW laws 3, 33 and 44, 15 reactions with photon production |
 | `synthetic-urr.ace` | The unresolved resonance block, which no small real table has |
 | `synthetic-laws.ace` | DLW laws 2, 4, 7, 9, 11, 61 and 66 |
 
@@ -121,6 +122,10 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 - **MF5 LF=12 (Madland-Nix)**. LF=1, LF=5, LF=7 and LF=9 are covered by Li6,
   Am244 and U235; Madland-Nix has no fixture. The ACE side is complete apart
   from law 5, which the Python reader cannot read at all — see issue #19.
+- **A fissile ACE table.** Li6 has no NU block, so the ACE fission path —
+  prompt and total nu, the delayed groups and their probabilities — is
+  unexercised. So is the URR block on a real table, and MFTYPE=13 photon
+  production.
 - **A delayed neutron group whose applicability varies with energy.** U235
   gives each group a constant share, which is the usual case; the branch that
   takes the product on the union of two grids is unexercised.
