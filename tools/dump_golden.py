@@ -714,6 +714,82 @@ def dump_mf28(d: Dump, path: str, mt: int, section: dict) -> None:
             d.floats(f"{sp}/{key}", s[key])
 
 
+def dump_mf33_subsection(d: Dump, sp: str, sub: dict) -> None:
+    """One MF=33 subsection. Shared with MF=40, which reuses the format."""
+    d.float(f"{sp}/XMF1", sub["XMF1"])
+    d.float(f"{sp}/XLFS1", sub["XLFS1"])
+    for key in ("MAT1", "MT1", "NC", "NI"):
+        d.int(f"{sp}/{key}", sub[key])
+    for i, nc in enumerate(sub["nc_subsections"]):
+        np_ = f"{sp}/nc/{i}"
+        d.int(f"{np_}/LTY", nc["LTY"])
+        d.float(f"{np_}/E1", nc["E1"])
+        d.float(f"{np_}/E2", nc["E2"])
+        for key in ("NCI", "MATS", "MTS", "NEI"):
+            if key in nc:
+                d.int(f"{np_}/{key}", nc[key])
+        for key in ("XMFS", "XLFSS"):
+            if key in nc:
+                d.float(f"{np_}/{key}", nc[key])
+        for key in ("CI", "XMTI", "EI", "WEI"):
+            if key in nc:
+                d.floats(f"{np_}/{key}", nc[key])
+    for i, ni in enumerate(sub["ni_subsections"]):
+        ip = f"{sp}/ni/{i}"
+        for key in ("LT", "LS", "LB", "NT", "NP", "NE", "NER", "NEC"):
+            if key in ni:
+                d.int(f"{ip}/{key}", ni[key])
+        for key in ("Ek", "Fk", "El", "Fl", "Fkk", "ER", "EC", "Fkl"):
+            if key in ni:
+                d.floats(f"{ip}/{key}", ni[key])
+
+
+def dump_mf33(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/MTL", section["MTL"])
+    d.int(f"{path}/NL", section["NL"])
+    for i, sub in enumerate(section["subsections"]):
+        dump_mf33_subsection(d, f"{path}/subsections/{i}", sub)
+
+
+def dump_mf34(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/LTT", section["LTT"])
+    d.int(f"{path}/NMT1", section["NMT1"])
+    # 'subsections' is always empty upstream; see issue #18. Emitting nothing
+    # for it keeps the Rust side, which reproduces that, in agreement.
+    for i, sub in enumerate(section["subsections"]):
+        sp = f"{path}/subsections/{i}"
+        for key in ("MAT1", "MT1", "NL", "NSS", "LCT"):
+            d.int(f"{sp}/{key}", sub[key])
+        for key in ("L", "L1", "NI"):
+            d.floats(f"{sp}/{key}", sub[key])
+        for j, ss in enumerate(sub["subsubsections"]):
+            ssp = f"{sp}/subsubsections/{j}"
+            for key in ("LS", "LB", "NT", "NE"):
+                d.floats(f"{ssp}/{key}", ss[key])
+            for k, values in enumerate(ss["Data"]):
+                d.floats(f"{ssp}/Data/{k}", values)
+
+
+def dump_mf40(d: Dump, path: str, mt: int, section: dict) -> None:
+    d.int(f"{path}/ZA", section["ZA"])
+    d.float(f"{path}/AWR", section["AWR"])
+    d.int(f"{path}/LIS", section["LIS"])
+    d.int(f"{path}/NS", section["NS"])
+    for i, sub in enumerate(section["subsections"]):
+        sp = f"{path}/subsections/{i}"
+        d.float(f"{sp}/QM", sub["QM"])
+        d.float(f"{sp}/QI", sub["QI"])
+        d.int(f"{sp}/IZAP", sub["IZAP"])
+        d.int(f"{sp}/LFS", sub["LFS"])
+        d.int(f"{sp}/NL", sub["NL"])
+        for j, ss in enumerate(sub["subsubsections"]):
+            dump_mf33_subsection(d, f"{sp}/subsubsections/{j}", ss)
+
+
 DUMPERS = {
     1: dump_mf1,
     2: dump_mf2,
@@ -729,6 +805,9 @@ DUMPERS = {
     26: dump_mf26,
     27: dump_mf27,
     28: dump_mf28,
+    33: dump_mf33,
+    34: dump_mf34,
+    40: dump_mf40,
     7: dump_mf7,
     8: dump_mf8,
     9: dump_mf9_mf10,

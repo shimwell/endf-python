@@ -64,6 +64,12 @@ pub enum Section {
     Mf27(Box<mf::atomic::Mf27>),
     /// MF=28, atomic relaxation data.
     Mf28(Box<mf::atomic::Mf28>),
+    /// MF=33, covariances of neutron cross sections.
+    Mf33(Box<mf::covariance::Mf33>),
+    /// MF=34, covariances of angular distributions.
+    Mf34(Box<mf::covariance::Mf34>),
+    /// MF=40, covariances of radionuclide production.
+    Mf40(Box<mf::covariance::Mf40>),
     Unparsed {
         mf: i32,
         mt: i32,
@@ -337,6 +343,30 @@ impl Material {
         }
     }
 
+    /// The MF=33 covariance section for a reaction.
+    pub fn mf33(&self, mt: i32) -> Option<&mf::covariance::Mf33> {
+        match self.section_data.get(&(33, mt))? {
+            Section::Mf33(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=34 covariance section for a reaction.
+    pub fn mf34(&self, mt: i32) -> Option<&mf::covariance::Mf34> {
+        match self.section_data.get(&(34, mt))? {
+            Section::Mf34(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The MF=40 covariance section for a reaction.
+    pub fn mf40(&self, mt: i32) -> Option<&mf::covariance::Mf40> {
+        match self.section_data.get(&(40, mt))? {
+            Section::Mf40(s) => Some(s),
+            _ => None,
+        }
+    }
+
     /// The MF=2 MT=151 resonance parameters.
     pub fn mf2(&self) -> Option<&mf::mf2::Mf2> {
         match self.section_data.get(&(2, 151))? {
@@ -424,6 +454,9 @@ fn parse_section(mf: i32, mt: i32, text: &str) -> Result<Section> {
         (26, _) => Section::Mf26(Box::new(mf::atomic::parse_mf26(&mut r)?)),
         (27, _) => Section::Mf27(Box::new(mf::atomic::parse_mf27(&mut r)?)),
         (28, _) => Section::Mf28(Box::new(mf::atomic::parse_mf28(&mut r)?)),
+        (33, _) => Section::Mf33(Box::new(mf::covariance::parse_mf33(&mut r)?)),
+        (34, _) => Section::Mf34(Box::new(mf::covariance::parse_mf34(&mut r, mt as i64)?)),
+        (40, _) => Section::Mf40(Box::new(mf::covariance::parse_mf40(&mut r)?)),
         _ => Section::Unparsed { mf, mt },
     })
 }

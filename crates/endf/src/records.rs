@@ -259,6 +259,19 @@ impl<'a> Reader<'a> {
         })
     }
 
+    /// Read the next CONT record without consuming it.
+    ///
+    /// The format sometimes puts the flag that says how to read a record
+    /// inside the record itself — MF=33's LB is the case here — so the reader
+    /// has to look before it leaps. The Python reader does the same with
+    /// `tell` and `seek`.
+    pub fn peek_cont_record(&mut self) -> Result<Cont> {
+        let mark = self.pos;
+        let cont = self.cont_record();
+        self.pos = mark;
+        cont
+    }
+
     pub fn head_record(&mut self) -> Result<Head> {
         let c = self.cont_record()?;
         Ok(Head {

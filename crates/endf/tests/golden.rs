@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use endf::mf::atomic::ElectroAtomicDistribution;
+use endf::mf::covariance::Mf33Subsection;
 use endf::mf::mf1::{FissionEnergyRelease, Nu, FISSION_ENERGY_COMPONENTS};
 use endf::mf::mf2::{ResonanceParameters, UnresolvedParameters};
 use endf::mf::mf5::EnergyDistribution;
@@ -420,6 +421,73 @@ fn dump_mf6_distribution(d: &mut Dump, dp: &str, dist: &Mf6Distribution) {
                     d.float(format!("{sp}/mu/{k}/mu"), entry.mu);
                     d.tab1(&format!("{sp}/mu/{k}/f"), &entry.f);
                 }
+            }
+        }
+    }
+}
+
+/// One MF=33 subsection. Shared with MF=40, which reuses the format.
+fn dump_mf33_subsection(d: &mut Dump, sp: &str, sub: &Mf33Subsection) {
+    d.float(format!("{sp}/XMF1"), sub.xmf1);
+    d.float(format!("{sp}/XLFS1"), sub.xlfs1);
+    for (key, value) in [
+        ("MAT1", sub.mat1),
+        ("MT1", sub.mt1),
+        ("NC", sub.nc),
+        ("NI", sub.ni),
+    ] {
+        d.int(format!("{sp}/{key}"), value);
+    }
+    for (i, nc) in sub.nc_subsections.iter().enumerate() {
+        let np = format!("{sp}/nc/{i}");
+        d.int(format!("{np}/LTY"), nc.lty);
+        d.float(format!("{np}/E1"), nc.e1);
+        d.float(format!("{np}/E2"), nc.e2);
+        if nc.lty == 0 {
+            d.int(format!("{np}/NCI"), nc.nci);
+            d.floats(format!("{np}/CI"), nc.ci.clone());
+            d.floats(format!("{np}/XMTI"), nc.xmti.clone());
+        } else {
+            d.int(format!("{np}/MATS"), nc.mats);
+            d.int(format!("{np}/MTS"), nc.mts);
+            d.int(format!("{np}/NEI"), nc.nei);
+            d.float(format!("{np}/XMFS"), nc.xmfs);
+            d.float(format!("{np}/XLFSS"), nc.xlfss);
+            d.floats(format!("{np}/EI"), nc.ei.clone());
+            d.floats(format!("{np}/WEI"), nc.wei.clone());
+        }
+    }
+    for (i, ni) in sub.ni_subsections.iter().enumerate() {
+        let ip = format!("{sp}/ni/{i}");
+        d.int(format!("{ip}/LB"), ni.lb);
+        d.int(format!("{ip}/NT"), ni.nt);
+        match ni.lb {
+            0..=4 => {
+                d.int(format!("{ip}/LT"), ni.lt);
+                d.int(format!("{ip}/NP"), ni.np);
+                d.floats(format!("{ip}/Ek"), ni.ek.clone());
+                d.floats(format!("{ip}/Fk"), ni.fk.clone());
+                d.floats(format!("{ip}/El"), ni.el.clone());
+                d.floats(format!("{ip}/Fl"), ni.fl.clone());
+            }
+            5 => {
+                d.int(format!("{ip}/LS"), ni.ls);
+                d.int(format!("{ip}/NE"), ni.ne);
+                d.floats(format!("{ip}/Ek"), ni.ek.clone());
+                d.floats(format!("{ip}/Fkk"), ni.fkk.clone());
+            }
+            6 => {
+                d.int(format!("{ip}/NER"), ni.ner);
+                d.int(format!("{ip}/NEC"), ni.nec);
+                d.floats(format!("{ip}/ER"), ni.er.clone());
+                d.floats(format!("{ip}/EC"), ni.ec.clone());
+                d.floats(format!("{ip}/Fkl"), ni.fkl.clone());
+            }
+            _ => {
+                d.int(format!("{ip}/LT"), ni.lt);
+                d.int(format!("{ip}/NP"), ni.np);
+                d.floats(format!("{ip}/Ek"), ni.ek.clone());
+                d.floats(format!("{ip}/Fk"), ni.fk.clone());
             }
         }
     }
@@ -1044,6 +1112,71 @@ fn dump_section(d: &mut Dump, path: &str, section: &Section) {
             }
         }
 
+        Section::Mf33(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/MTL"), s.mtl);
+            d.int(format!("{path}/NL"), s.nl);
+            for (i, sub) in s.subsections.iter().enumerate() {
+                dump_mf33_subsection(d, &format!("{path}/subsections/{i}"), sub);
+            }
+        }
+
+        Section::Mf34(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/LTT"), s.ltt);
+            d.int(format!("{path}/NMT1"), s.nmt1);
+            // Always empty, matching upstream; see issue #18.
+            for (i, sub) in s.subsections.iter().enumerate() {
+                let sp = format!("{path}/subsections/{i}");
+                for (key, value) in [
+                    ("MAT1", sub.mat1),
+                    ("MT1", sub.mt1),
+                    ("NL", sub.nl),
+                    ("NSS", sub.nss),
+                    ("LCT", sub.lct),
+                ] {
+                    d.int(format!("{sp}/{key}"), value);
+                }
+                for (key, values) in [("L", &sub.l), ("L1", &sub.l1), ("NI", &sub.ni)] {
+                    d.floats(format!("{sp}/{key}"), values.clone());
+                }
+                for (j, ss) in sub.subsubsections.iter().enumerate() {
+                    let ssp = format!("{sp}/subsubsections/{j}");
+                    for (key, values) in [
+                        ("LS", &ss.ls),
+                        ("LB", &ss.lb),
+                        ("NT", &ss.nt),
+                        ("NE", &ss.ne),
+                    ] {
+                        d.floats(format!("{ssp}/{key}"), values.clone());
+                    }
+                    for (k, values) in ss.data.iter().enumerate() {
+                        d.floats(format!("{ssp}/Data/{k}"), values.clone());
+                    }
+                }
+            }
+        }
+
+        Section::Mf40(s) => {
+            d.int(format!("{path}/ZA"), s.za);
+            d.float(format!("{path}/AWR"), s.awr);
+            d.int(format!("{path}/LIS"), s.lis);
+            d.int(format!("{path}/NS"), s.ns);
+            for (i, sub) in s.subsections.iter().enumerate() {
+                let sp = format!("{path}/subsections/{i}");
+                d.float(format!("{sp}/QM"), sub.qm);
+                d.float(format!("{sp}/QI"), sub.qi);
+                d.int(format!("{sp}/IZAP"), sub.izap);
+                d.int(format!("{sp}/LFS"), sub.lfs);
+                d.int(format!("{sp}/NL"), sub.nl);
+                for (j, ss) in sub.subsubsections.iter().enumerate() {
+                    dump_mf33_subsection(d, &format!("{sp}/subsubsections/{j}"), ss);
+                }
+            }
+        }
+
         Section::Unparsed { .. } => {}
     }
 }
@@ -1248,8 +1381,10 @@ fn unported_files_keep_their_text() {
     // Built synthetically rather than taken from a fixture: every file in
     // every fixture on this branch is now ported, and a test that depends on
     // that not being true stops testing anything the moment it stops holding.
-    // MF=34 has no Rust parser yet; when it gains one, pick another.
-    const MF: i32 = 34;
+    // MF=32 (resonance parameter covariances) is not parsed by the Python
+    // reader either — its dispatch warns and ignores — so it is a stable
+    // choice rather than one the next commit invalidates.
+    const MF: i32 = 32;
     let line =
         |body: &str, mat: i32, mf: i32, mt: i32| format!("{body:<66}{mat:>4}{mf:>2}{mt:>3}\n");
     let text = line(" tape id", 1, 0, 0)
@@ -1273,6 +1408,48 @@ fn unported_files_keep_their_text() {
     let body = &m.section_text[&(MF, 2)];
     assert_eq!(body.lines().count(), 2);
     assert!(body.contains("1.001000+3"));
+}
+
+/// The files that have a Rust parser but which no fixture exercises.
+///
+/// These are written and structurally complete but have never been run against
+/// a real evaluation, so nothing here is checked against the Python reader.
+/// Kept as an explicit list rather than a remark in a commit message: the test
+/// below fails when a fixture starts covering one of them, which is the moment
+/// the entry should be deleted.
+const UNCOVERED_BY_ANY_FIXTURE: [i32; 10] = [6, 7, 12, 13, 14, 15, 26, 33, 34, 40];
+
+/// The MF files that have a Rust parser at all.
+const PORTED: [i32; 21] = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 23, 26, 27, 28, 33, 34, 40,
+];
+
+#[test]
+fn the_uncovered_parser_list_is_accurate() {
+    let mut seen: BTreeSet<i32> = BTreeSet::new();
+    for entry in std::fs::read_dir(repo_root().join("tests")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "endf") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        for m in materials_from_str(&text).unwrap() {
+            seen.extend(m.section_data.keys().map(|&(mf, _)| mf));
+        }
+    }
+
+    let uncovered: BTreeSet<i32> = PORTED
+        .iter()
+        .copied()
+        .filter(|mf| !seen.contains(mf))
+        .collect();
+    let declared: BTreeSet<i32> = UNCOVERED_BY_ANY_FIXTURE.into_iter().collect();
+    assert_eq!(
+        uncovered, declared,
+        "the list of parsers no fixture exercises has changed. If a fixture now \
+         covers one of these, delete it from UNCOVERED_BY_ANY_FIXTURE; if a new \
+         parser has no coverage, add it."
+    );
 }
 
 /// Every fixture is now fully parsed. This guards the claim: if a fixture is

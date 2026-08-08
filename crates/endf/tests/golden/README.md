@@ -37,9 +37,35 @@ ported.
 
 ## Coverage still wanted
 
-One evaluation (`n-095_Am_244`, ENDF/B-VIII.0) is checked in today. It covers
-MF 1–4, 6, 12–15 and 33 for a fissile actinide. The gaps below are what the
-Arrow conversion actually depends on, so they are roughly in priority order.
+Every ENDF file the Python package parses now has a Rust parser. **Half of them
+have never been run against a real evaluation**: no fixture here contains
+
+    MF 6, 7, 12, 13, 14, 15, 26, 33, 34, 40
+
+so those parsers are structurally complete and entirely unverified. The list is
+pinned in `golden.rs` as `UNCOVERED_BY_ANY_FIXTURE`, and the test fails when a
+fixture starts covering one — that is the moment to delete the entry.
+
+Closing that gap needs fixtures, not code. In rough priority order:
+
+- **MF6** — any non-actinide neutron evaluation. This is the biggest single gap:
+  MF6 carries the Kalbach-Mann and n-body distributions, which are four of the
+  shapes an Arrow projection has columns for, and not one line of that reader
+  has seen real data. Fe56 or Li6 would do it, and would also give MF2 a real
+  resonance range.
+- **MF33/34/40** — covariances. Any evaluation with an uncertainty file. These
+  are also the only route to exercising the INTG record.
+- **MF12–15** — photon production, present in most neutron evaluations.
+- **MF7** — thermal scattering, needs a `tsl-` file.
+- **MF26** — electro-atomic, needs an `electroat-` file.
+
+`MF2` deserves its own line: it is covered, but only by a range with
+LRU=0/LRF=0, which is the scattering radius and nothing else. Breit-Wigner,
+Reich-Moore, R-matrix limited and all three unresolved cases are implemented
+and untested.
+
+The gaps below are what the Arrow conversion depends on, in roughly the order
+it needs them.
 
 ### By format feature
 
