@@ -786,6 +786,174 @@ fn mf1_mt460_dict<'py>(
     Ok(d)
 }
 
+fn mf33_subsection_dict<'py>(
+    py: Python<'py>,
+    sub: &endf::mf::covariance::Mf33Subsection,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("XMF1", sub.xmf1)?;
+    d.set_item("XLFS1", sub.xlfs1)?;
+    d.set_item("MAT1", sub.mat1)?;
+    d.set_item("MT1", sub.mt1)?;
+    d.set_item("NC", sub.nc)?;
+    d.set_item("NI", sub.ni)?;
+
+    let nc: PyResult<Vec<_>> = sub
+        .nc_subsections
+        .iter()
+        .map(|nc| {
+            let e = PyDict::new(py);
+            e.set_item("LTY", nc.lty)?;
+            e.set_item("E1", nc.e1)?;
+            e.set_item("E2", nc.e2)?;
+            // LTY says which half of the record was written.
+            if nc.lty == 0 {
+                e.set_item("NCI", nc.nci)?;
+                e.set_item("CI", nc.ci.clone())?;
+                e.set_item("XMTI", nc.xmti.clone())?;
+            } else {
+                e.set_item("MATS", nc.mats)?;
+                e.set_item("MTS", nc.mts)?;
+                e.set_item("NEI", nc.nei)?;
+                e.set_item("XMFS", nc.xmfs)?;
+                e.set_item("XLFSS", nc.xlfss)?;
+                e.set_item("EI", nc.ei.clone())?;
+                e.set_item("WEI", nc.wei.clone())?;
+            }
+            Ok(e)
+        })
+        .collect();
+    d.set_item("nc_subsections", nc?)?;
+
+    let ni: PyResult<Vec<_>> = sub
+        .ni_subsections
+        .iter()
+        .map(|ni| {
+            let e = PyDict::new(py);
+            e.set_item("LB", ni.lb)?;
+            e.set_item("NT", ni.nt)?;
+            // Each LB is its own record layout.
+            match ni.lb {
+                0..=4 => {
+                    e.set_item("LT", ni.lt)?;
+                    e.set_item("NP", ni.np)?;
+                    e.set_item("Ek", ni.ek.clone())?;
+                    e.set_item("Fk", ni.fk.clone())?;
+                    e.set_item("El", ni.el.clone())?;
+                    e.set_item("Fl", ni.fl.clone())?;
+                }
+                5 => {
+                    e.set_item("LS", ni.ls)?;
+                    e.set_item("NE", ni.ne)?;
+                    e.set_item("Ek", ni.ek.clone())?;
+                    e.set_item("Fkk", ni.fkk.clone())?;
+                }
+                6 => {
+                    e.set_item("NER", ni.ner)?;
+                    e.set_item("NEC", ni.nec)?;
+                    e.set_item("ER", ni.er.clone())?;
+                    e.set_item("EC", ni.ec.clone())?;
+                    e.set_item("Fkl", ni.fkl.clone())?;
+                }
+                _ => {
+                    e.set_item("LT", ni.lt)?;
+                    e.set_item("NP", ni.np)?;
+                    e.set_item("Ek", ni.ek.clone())?;
+                    e.set_item("Fk", ni.fk.clone())?;
+                }
+            }
+            Ok(e)
+        })
+        .collect();
+    d.set_item("ni_subsections", ni?)?;
+    Ok(d)
+}
+
+fn mf33_dict<'py>(py: Python<'py>, s: &endf::mf::covariance::Mf33) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("MTL", s.mtl)?;
+    d.set_item("NL", s.nl)?;
+    let subs: PyResult<Vec<_>> = s
+        .subsections
+        .iter()
+        .map(|sub| mf33_subsection_dict(py, sub))
+        .collect();
+    d.set_item("subsections", subs?)?;
+    Ok(d)
+}
+
+fn mf34_dict<'py>(py: Python<'py>, s: &endf::mf::covariance::Mf34) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LTT", s.ltt)?;
+    d.set_item("NMT1", s.nmt1)?;
+    // Always empty, matching upstream; see issue #18.
+    let subs: PyResult<Vec<_>> = s
+        .subsections
+        .iter()
+        .map(|sub| {
+            let e = PyDict::new(py);
+            e.set_item("MAT1", sub.mat1)?;
+            e.set_item("MT1", sub.mt1)?;
+            e.set_item("NL", sub.nl)?;
+            e.set_item("NSS", sub.nss)?;
+            e.set_item("LCT", sub.lct)?;
+            e.set_item("L", sub.l.clone())?;
+            e.set_item("L1", sub.l1.clone())?;
+            e.set_item("NI", sub.ni.clone())?;
+            let sss: PyResult<Vec<_>> = sub
+                .subsubsections
+                .iter()
+                .map(|ss| {
+                    let f = PyDict::new(py);
+                    f.set_item("LS", ss.ls.clone())?;
+                    f.set_item("LB", ss.lb.clone())?;
+                    f.set_item("NT", ss.nt.clone())?;
+                    f.set_item("NE", ss.ne.clone())?;
+                    f.set_item("Data", ss.data.clone())?;
+                    Ok(f)
+                })
+                .collect();
+            e.set_item("subsubsections", sss?)?;
+            Ok(e)
+        })
+        .collect();
+    d.set_item("subsections", subs?)?;
+    Ok(d)
+}
+
+fn mf40_dict<'py>(py: Python<'py>, s: &endf::mf::covariance::Mf40) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LIS", s.lis)?;
+    d.set_item("NS", s.ns)?;
+    let subs: PyResult<Vec<_>> = s
+        .subsections
+        .iter()
+        .map(|sub| {
+            let e = PyDict::new(py);
+            e.set_item("QM", sub.qm)?;
+            e.set_item("QI", sub.qi)?;
+            e.set_item("IZAP", sub.izap)?;
+            e.set_item("LFS", sub.lfs)?;
+            e.set_item("NL", sub.nl)?;
+            let sss: PyResult<Vec<_>> = sub
+                .subsubsections
+                .iter()
+                .map(|ss| mf33_subsection_dict(py, ss))
+                .collect();
+            e.set_item("subsubsections", sss?)?;
+            Ok(e)
+        })
+        .collect();
+    d.set_item("subsections", subs?)?;
+    Ok(d)
+}
+
 /// One section as the Python reader's dictionary, where there is one.
 ///
 /// `None` for a section whose dictionary shape has not been written. Those
@@ -809,6 +977,9 @@ fn section_dict<'py>(py: Python<'py>, section: &Section) -> PyResult<Option<Boun
         Section::Mf23(s) => mf23_dict(py, s)?,
         Section::Mf27(s) => mf27_dict(py, s)?,
         Section::Mf28(s) => mf28_dict(py, s)?,
+        Section::Mf33(s) => mf33_dict(py, s)?,
+        Section::Mf34(s) => mf34_dict(py, s)?,
+        Section::Mf40(s) => mf40_dict(py, s)?,
         _ => return Ok(None),
     }))
 }

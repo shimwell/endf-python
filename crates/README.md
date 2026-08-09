@@ -50,11 +50,11 @@ gain in what can be expressed.
 
 `Material.section_data` and `material[3, 1]` are there too, giving back the
 same dictionaries the Python reader does, keyed by the same ENDF field names.
-93% of the sections in the fixtures have one — MF 1, 3, 4, 5, 8, 9, 10, 12, 13,
-14, 15, 23, 27 and 28. A section with no dictionary form is left out of
-`section_data` rather than half-built, and asking for it by key says so.
+94% of the sections in the fixtures have one — MF 1, 3, 4, 5, 8, 9, 10, 12, 13,
+14, 15, 23, 27, 28, 33, 34 and 40. A section with no dictionary form is left out
+of `section_data` rather than half-built, and asking for it by key says so.
 
-What is left: MF 2, 6, 7, 26, 33 and 34 have no dictionary yet, and MF=8
+What is left: MF 2, 6, 7 and 26 have no dictionary yet, and MF=8
 MT=457 does not have one on purpose — decay data is reached through `Decay`,
 which is a better shape. The set is pinned in
 `tests/test_rust_bindings.py::SECTIONS_WITHOUT_A_DICT` and asserted, so it
