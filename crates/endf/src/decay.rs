@@ -458,10 +458,28 @@ pub struct ProductYield {
     pub yield_: WithUncertainty,
 }
 
+/// The fissioning nuclide, as MF=1 MT=451 describes it.
+///
+/// Smaller than [`DecayNuclide`]: a yield evaluation has no MF=8 MT=457, so
+/// there is no spin, parity or mass to report.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct FissioningNuclide {
+    /// GNDS name, e.g. `"U235"`.
+    pub name: String,
+    pub atomic_number: i64,
+    pub mass_number: i64,
+    /// Isomeric state ordinal.
+    pub isomeric_state: i64,
+    /// Nuclear level index, which is not the same thing.
+    pub excited_state: i64,
+}
+
 /// Independent and cumulative fission product yields, from MF=8 MT=454 and
 /// MT=459.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FissionProductYields {
+    /// The fissioning nuclide.
+    pub nuclide: FissioningNuclide,
     /// The incident energies the yields are given at, in eV.
     pub energies: Vec<f64>,
     /// Yields before delayed decay, one map per incident energy.
@@ -474,6 +492,19 @@ impl FissionProductYields {
     /// Read the fission product yields of a material.
     pub fn from_material(material: &Material) -> Result<FissionProductYields> {
         let mut out = FissionProductYields::default();
+
+        // The fissioning nuclide comes from MF=1 MT=451, not from the yield
+        // sections, which only identify the products.
+        if let Some(info) = material.mf1_mt451() {
+            let (z, a) = (info.za / 1000, info.za % 1000);
+            out.nuclide = FissioningNuclide {
+                name: crate::gnds_name(z as u32, a as u32, info.liso as u32),
+                atomic_number: z,
+                mass_number: a,
+                isomeric_state: info.liso,
+                excited_state: info.lis,
+            };
+        }
 
         for (mt, target) in [(454, true), (459, false)] {
             let Some(section) = material.mf8_mt454(mt) else {
@@ -655,6 +686,32 @@ mod tests {
         assert_eq!(d.modes[0].modes, ["IT"]);
         assert_eq!(d.modes[0].daughter_state, 1);
         assert_eq!(d.modes[0].daughter().as_deref(), Some("In116_m1"));
+    }
+
+    #[test]
+    fn reads_independent_and_cumulative_yields() {
+        const NFY: &[u8] = include_bytes!("../../../tests/synthetic-nfy.endf.xz");
+        let m = Material::from_str(&crate::testdata::text(NFY)).unwrap();
+        let fpy = FissionProductYields::from_material(&m).unwrap();
+
+        assert_eq!(fpy.nuclide.name, "U235");
+        assert_eq!(fpy.nuclide.atomic_number, 92);
+        assert_eq!(fpy.nuclide.mass_number, 235);
+        assert_eq!(fpy.energies, [0.0253, 5.0e5]);
+
+        // The fast energy carries one product more than the thermal one, so a
+        // reader that reuses NFP across energies would be caught here.
+        assert_eq!(fpy.independent.len(), 2);
+        assert_eq!(fpy.independent[0].len(), 3);
+        assert_eq!(fpy.independent[1].len(), 4);
+        assert_eq!(fpy.independent[0][1].name, "Xe135_m1");
+        assert_eq!(fpy.independent[0][1].yield_, (0.0134, 0.0006));
+
+        // Independent and cumulative differ, so returning one for the other
+        // would be caught too.
+        assert_eq!(fpy.cumulative[0][0].name, "Zr95");
+        assert_eq!(fpy.cumulative[0][0].yield_, (0.0605, 0.0018));
+        assert_ne!(fpy.independent[0][0].yield_, fpy.cumulative[0][0].yield_);
     }
 
     #[test]

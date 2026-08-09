@@ -191,6 +191,42 @@ METASTABLE_DECAY = [
 ]
 
 
+def test_fission_product_yields_match():
+    name = "synthetic-nfy.endf.xz"
+    reference = endf.FissionProductYields(endf.Material(fixture(name)))
+    got = _endf.FissionProductYields(fixture(name))
+
+    assert got.nuclide == reference.nuclide
+    assert list(got.energies) == list(reference.energies)
+    for have, want in [
+        (got.independent, reference.independent),
+        (got.cumulative, reference.cumulative),
+    ]:
+        assert len(have) == len(want)
+        for at_energy, want_at_energy in zip(have, want):
+            assert sorted(at_energy) == sorted(want_at_energy)
+            for product, (value, uncertainty) in at_energy.items():
+                ufloat = want_at_energy[product]
+                assert value == pytest.approx(ufloat.nominal_value, rel=1e-15)
+                assert uncertainty == pytest.approx(ufloat.std_dev, rel=1e-15)
+
+    # Reading from an already-parsed material gives the same thing.
+    from_material = _endf.FissionProductYields.from_material(
+        _endf.Material(fixture(name))
+    )
+    assert from_material.nuclide == got.nuclide
+    assert from_material.independent == got.independent
+
+
+def test_fission_product_yields_of_an_evaluation_without_them(am244, rust_am244):
+    reference = endf.FissionProductYields(am244)
+    got = _endf.FissionProductYields.from_material(rust_am244)
+    assert got.energies is reference.energies is None
+    assert got.independent == reference.independent == []
+    assert got.cumulative == reference.cumulative == []
+    assert got.nuclide == reference.nuclide
+
+
 def test_radionuclide_production_matches():
     # In-115 is the fixture with MF=9 and MF=10 production data.
     name = "n-049_In-115_trimmed.endf.xz"

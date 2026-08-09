@@ -47,7 +47,7 @@ pub use angle_energy::{
 };
 pub use chain::{Chain, Nuclide, ReactionInfo, REACTIONS};
 pub use data::{gnds_name, zam, EV_PER_MEV, K_BOLTZMANN};
-pub use decay::{Decay, DecayMode, FissionProductYields};
+pub use decay::{Decay, DecayMode, FissionProductYields, FissioningNuclide, ProductYield};
 pub use error::{Error, Result};
 pub use fission_energy::FissionEnergyRelease;
 pub use function::{Polynomial, Tabulated1D, Tabulated2D};

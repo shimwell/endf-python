@@ -1125,6 +1125,38 @@ fn mf2_dict<'py>(py: Python<'py>, s: &endf::mf::mf2::Mf2) -> PyResult<Bound<'py,
     Ok(d)
 }
 
+fn mf8_mt454_dict<'py>(
+    py: Python<'py>,
+    s: &endf::mf::mf8::Mf8Mt454,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LE", s.le)?;
+    let mut sets = Vec::with_capacity(s.yields.len());
+    for (i, set) in s.yields.iter().enumerate() {
+        let e = PyDict::new(py);
+        e.set_item("E", set.energy)?;
+        e.set_item("NN", set.nn)?;
+        e.set_item("NFP", set.nfp)?;
+        // The format overloads one field: LE+1 at the first energy, the
+        // interpolation scheme after it, and the two get different keys.
+        e.set_item(if i == 0 { "LE" } else { "I" }, set.le_or_interpolation)?;
+        let mut products = Vec::with_capacity(set.products.len());
+        for p in &set.products {
+            let q = PyDict::new(py);
+            q.set_item("ZAFP", p.zafp)?;
+            q.set_item("FPS", p.fps)?;
+            q.set_item("Y", p.y)?;
+            products.push(q);
+        }
+        e.set_item("products", products)?;
+        sets.push(e);
+    }
+    d.set_item("yields", sets)?;
+    Ok(d)
+}
+
 fn mf8_mt457_dict<'py>(
     py: Python<'py>,
     s: &endf::mf::mf8::Mf8Mt457,
@@ -1661,6 +1693,7 @@ fn section_dict<'py>(py: Python<'py>, section: &Section) -> PyResult<Option<Boun
         Section::Mf1Mt460(s) => mf1_mt460_dict(py, s)?,
         Section::Mf2(s) => mf2_dict(py, s)?,
         Section::Mf8(s) => mf8_dict(py, s)?,
+        Section::Mf8Mt454(s) => mf8_mt454_dict(py, s)?,
         Section::Mf8Mt457(s) => mf8_mt457_dict(py, s)?,
         Section::Mf3(s) => mf3_dict(py, s)?,
         Section::Mf4(s) => mf4_dict(py, s)?,
@@ -2653,6 +2686,98 @@ fn py_gnds_name(z: u32, a: u32, m: u32) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Fission product yields
+// ---------------------------------------------------------------------------
+
+/// Independent and cumulative fission product yields, from MF=8 MT=454/459.
+#[pyclass(name = "FissionProductYields", module = "endf._endf")]
+struct PyFissionProductYields {
+    inner: endf::FissionProductYields,
+}
+
+/// One energy's yields as `{name: (value, uncertainty)}`, the shape the Python
+/// reader gives once its `ufloat` is taken apart.
+fn yields_at_energy<'py>(
+    py: Python<'py>,
+    yields: &[endf::ProductYield],
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    for y in yields {
+        d.set_item(&y.name, y.yield_)?;
+    }
+    Ok(d)
+}
+
+#[pymethods]
+impl PyFissionProductYields {
+    #[new]
+    fn new(filename: &str) -> PyResult<Self> {
+        let material = endf::Material::from_str(&read_text(filename)?).map_err(to_py_err)?;
+        Self::from_material(&PyMaterial { inner: material })
+    }
+
+    /// Read the yields of an already-parsed material.
+    #[staticmethod]
+    fn from_material(material: &PyMaterial) -> PyResult<Self> {
+        let inner =
+            endf::FissionProductYields::from_material(&material.inner).map_err(to_py_err)?;
+        Ok(PyFissionProductYields { inner })
+    }
+
+    /// The fissioning nuclide, from MF=1 MT=451.
+    #[getter]
+    fn nuclide<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let n = &self.inner.nuclide;
+        let d = PyDict::new(py);
+        d.set_item("name", &n.name)?;
+        d.set_item("atomic_number", n.atomic_number)?;
+        d.set_item("mass_number", n.mass_number)?;
+        d.set_item("isomeric_state", n.isomeric_state)?;
+        d.set_item("excited_state", n.excited_state)?;
+        Ok(d)
+    }
+
+    /// The incident energies the yields are tabulated at, or None when the
+    /// evaluation has neither yield section.
+    #[getter]
+    fn energies(&self) -> Option<Vec<f64>> {
+        if self.inner.energies.is_empty() {
+            None
+        } else {
+            Some(self.inner.energies.clone())
+        }
+    }
+
+    /// Yields before delayed decay, one dict per incident energy.
+    #[getter]
+    fn independent<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
+        self.inner
+            .independent
+            .iter()
+            .map(|y| yields_at_energy(py, y))
+            .collect()
+    }
+
+    /// Yields after it.
+    #[getter]
+    fn cumulative<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
+        self.inner
+            .cumulative
+            .iter()
+            .map(|y| yields_at_energy(py, y))
+            .collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<FissionProductYields: {}, {} energies>",
+            self.inner.nuclide.name,
+            self.inner.energies.len()
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Radionuclide production
 // ---------------------------------------------------------------------------
 
@@ -2920,6 +3045,7 @@ fn _endf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_isomer_table, m)?)?;
     m.add_function(wrap_pyfunction!(py_level_to_isomeric_state, m)?)?;
     m.add_class::<PyRadionuclideProduction>()?;
+    m.add_class::<PyFissionProductYields>()?;
     add_tables(m)?;
     m.add_class::<PyMaterial>()?;
     m.add_class::<PyProduct>()?;

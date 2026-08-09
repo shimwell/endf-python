@@ -128,6 +128,7 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 | `synthetic-urr.ace` | The unresolved resonance block, which no small real table has |
 | `synthetic-laws.ace` | DLW laws 2, 4, 7, 9, 11, 61 and 66 |
 | `synthetic-denormal.ace` | The float form NJOY writes for a denormal, `6.10562372605-318` |
+| `synthetic-nfy.endf` | MF8 MT=454 and MT=459, the fission product yields |
 
 ### Fixtures still wanted
 
@@ -144,8 +145,6 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
   see issue #15 — so a fixture alone will not cover them.
 - **Adler-Adler (LRF=4)**, which both readers reject rather than parse. A
   fixture would only pin that rejection.
-- **MF8 MT=454 and MT=459**, the fission product yields. MT=457 is now
-  covered by the two In116 decay fixtures; the yields are not.
 - **MF5 LF=12 (Madland-Nix)**. LF=1, LF=5, LF=7 and LF=9 are covered by Li6,
   Am244 and U235; Madland-Nix has no fixture. The ACE side is complete apart
   from law 5, which the Python reader cannot read at all — see issue #19.

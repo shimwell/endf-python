@@ -30,8 +30,9 @@ underneath it.
 
 The concrete types come across as classes — `Material`, `Tabulated1D`,
 `Tabulated2D`, `CrossSection`, `Product`, `Reaction`, `IncidentNeutron`,
-`IncidentPhoton`, `Decay`, `Chain`, `AceTable`, `RadionuclideProduction` — with
-the free functions beside them: `float_endf`, `int_endf`, `get_materials`,
+`IncidentPhoton`, `Decay`, `Chain`, `AceTable`, `FissionProductYields`,
+`RadionuclideProduction` — with the free functions beside them:
+`float_endf`, `int_endf`, `get_materials`,
 `get_tables`, `ace_tables_from_string`, `reaction_name`, `reaction_mt`,
 `photon_reaction_name`, `photon_reaction_mt`, `gnds_name`, `zam`,
 `temperature_str`, `decay_modes`, `normalise_branch_ratios`,
@@ -60,7 +61,7 @@ gain in what can be expressed.
 
 `Material.section_data` and `material[3, 1]` are there too, giving back the
 same dictionaries the Python reader does, keyed by the same ENDF field names.
-Every one of the 400 sections across the fixtures has one — MF 1, 2, 3, 4, 5, 6,
+Every one of the 403 sections across the fixtures has one — MF 1, 2, 3, 4, 5, 6,
 7, 8, 9, 10, 12, 13, 14, 15, 23, 26, 27, 28, 33, 34 and 40 — so code written
 against `Material.section_data` runs unchanged against either reader. That is
 held by `tests/test_rust_bindings.py`, which compares the two dictionaries key
