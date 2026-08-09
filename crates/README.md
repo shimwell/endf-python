@@ -30,13 +30,14 @@ underneath it.
 
 The concrete types come across as classes — `Material`, `Tabulated1D`,
 `Tabulated2D`, `CrossSection`, `Product`, `Reaction`, `IncidentNeutron`,
-`IncidentPhoton`, `Decay`, `Chain`, `AceTable` — with the free functions beside
-them: `float_endf`, `int_endf`, `get_materials`, `get_tables`,
-`ace_tables_from_string`, `reaction_name`, `reaction_mt`,
+`IncidentPhoton`, `Decay`, `Chain`, `AceTable`, `RadionuclideProduction` — with
+the free functions beside them: `float_endf`, `int_endf`, `get_materials`,
+`get_tables`, `ace_tables_from_string`, `reaction_name`, `reaction_mt`,
 `photon_reaction_name`, `photon_reaction_mt`, `gnds_name`, `zam`,
-`temperature_str`, `decay_modes` and `normalise_branch_ratios`, and the constant
-tables `ATOMIC_SYMBOL`, `SUM_RULES`, `INTERPOLATION_SCHEME`, `FISSION_MTS`,
-`EV_PER_MEV` and `K_BOLTZMANN`.
+`temperature_str`, `decay_modes`, `normalise_branch_ratios`,
+`radionuclide_production`, `isomer_table` and `level_to_isomeric_state`, and the
+constant tables `ATOMIC_SYMBOL`, `SUM_RULES`, `INTERPOLATION_SCHEME`,
+`FISSION_MTS`, `EV_PER_MEV` and `K_BOLTZMANN`.
 
 `Material.interpret()` picks the class the material's sublibrary calls for, as
 it does upstream: an `IncidentNeutron` for NSUB=10, an `IncidentPhoton` for

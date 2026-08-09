@@ -183,6 +183,64 @@ def test_module_tables_match():
     assert _endf.K_BOLTZMANN == endf.data.K_BOLTZMANN
 
 
+#: The metastable decay evaluations the fixtures carry, which is what an isomer
+#: table is built from — ground states are implicit.
+METASTABLE_DECAY = [
+    "dec-049_In_116m1.endf.xz",
+    "dec-049_In_116m2.endf.xz",
+]
+
+
+def test_radionuclide_production_matches():
+    # In-115 is the fixture with MF=9 and MF=10 production data.
+    name = "n-049_In-115_trimmed.endf.xz"
+    reference = endf.radionuclide_production(endf.Material(fixture(name)))
+    got = _endf.radionuclide_production(_endf.Material(fixture(name)))
+
+    assert sorted(got) == sorted(reference)
+    for mt, states in reference.items():
+        assert len(got[mt]) == len(states)
+        for have, want in zip(got[mt], states):
+            assert have.ZAP == want.ZAP
+            assert have.LFS == want.LFS
+            assert have.QM == pytest.approx(want.QM, rel=1e-15)
+            assert have.QI == pytest.approx(want.QI, rel=1e-15)
+            assert have.ELFS == want.ELFS
+            assert have.excitation_energy == pytest.approx(
+                want.excitation_energy, rel=1e-15
+            )
+            for got_tab, want_tab in [
+                (have.yields, want.yields),
+                (have.cross_section, want.cross_section),
+            ]:
+                assert (got_tab is None) == (want_tab is None)
+                if want_tab is not None:
+                    assert list(got_tab.x) == list(want_tab.x)
+                    assert list(got_tab.y) == list(want_tab.y)
+
+
+def test_isomer_table_matches():
+    files = [fixture(name) for name in METASTABLE_DECAY]
+    assert _endf.isomer_table(files) == endf.isomer_table(files)
+
+
+def test_level_to_isomeric_state_matches():
+    table = endf.isomer_table([fixture(name) for name in METASTABLE_DECAY])
+    cases = [
+        (49, 116, 0, 0.0, 3000.0),
+        (49, 116, 1, 0.0, 3000.0),
+        (49, 116, 1, 127300.0, 3000.0),
+        (49, 116, 4, 162393.0, 3000.0),
+        (49, 116, 4, 9.0e5, 10.0),
+        # A nuclide with no isomers in the table maps to ground.
+        (26, 56, 1, 1.0e5, 3000.0),
+    ]
+    for z, a, lfs, energy, tol in cases:
+        assert _endf.level_to_isomeric_state(
+            z, a, lfs, energy, table, tol_eV=tol
+        ) == endf.level_to_isomeric_state(z, a, lfs, energy, table, tol_eV=tol)
+
+
 def test_interpret_picks_the_class_by_sublibrary(am244, rust_am244):
     # NSUB=10, an incident-neutron evaluation.
     assert isinstance(am244.interpret(), endf.IncidentNeutron)

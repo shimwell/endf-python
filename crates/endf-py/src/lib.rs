@@ -2652,6 +2652,173 @@ fn py_gnds_name(z: u32, a: u32, m: u32) -> String {
     endf::gnds_name(z, a, m)
 }
 
+// ---------------------------------------------------------------------------
+// Radionuclide production
+// ---------------------------------------------------------------------------
+
+/// Production data for a single final state of one reaction.
+#[pyclass(name = "RadionuclideProduction", module = "endf._endf")]
+#[derive(Clone)]
+struct PyRadionuclideProduction {
+    inner: endf::RadionuclideProduction,
+}
+
+#[pymethods]
+#[allow(non_snake_case)]
+impl PyRadionuclideProduction {
+    #[getter]
+    fn ZAP(&self) -> i64 {
+        self.inner.zap
+    }
+
+    #[getter]
+    fn LFS(&self) -> i64 {
+        self.inner.lfs
+    }
+
+    #[getter]
+    fn QM(&self) -> f64 {
+        self.inner.qm
+    }
+
+    #[getter]
+    fn QI(&self) -> f64 {
+        self.inner.qi
+    }
+
+    #[getter]
+    fn ELFS(&self) -> Option<f64> {
+        self.inner.elfs
+    }
+
+    /// MF=9 yield, a multiplier on the reaction cross section.
+    #[getter]
+    fn yields(&self) -> Option<PyTabulated1D> {
+        self.inner.yields.as_ref().map(tab1_class)
+    }
+
+    /// MF=10 production cross section, in barns.
+    #[getter]
+    fn cross_section(&self) -> Option<PyTabulated1D> {
+        self.inner.cross_section.as_ref().map(tab1_class)
+    }
+
+    /// The MF=8 excitation energy when the evaluation gave one, else QM - QI.
+    #[getter]
+    fn excitation_energy(&self) -> f64 {
+        self.inner.excitation_energy()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<RadionuclideProduction: ZAP={}, LFS={}>",
+            self.inner.zap, self.inner.lfs
+        )
+    }
+}
+
+/// Collect a material's radionuclide production data from MF=8, 9 and 10,
+/// keyed by MT.
+#[pyfunction]
+#[pyo3(name = "radionuclide_production")]
+fn py_radionuclide_production(
+    material: &PyMaterial,
+) -> BTreeMap<i32, Vec<PyRadionuclideProduction>> {
+    endf::radionuclide_production(&material.inner)
+        .into_iter()
+        .map(|(mt, states)| {
+            let states = states
+                .into_iter()
+                .map(|inner| PyRadionuclideProduction { inner })
+                .collect();
+            (mt, states)
+        })
+        .collect()
+}
+
+/// One isomeric state, as `isomer_table` reports it.
+#[derive(FromPyObject)]
+struct IsomerEntry {
+    #[pyo3(item("LIS"))]
+    lis: i64,
+    #[pyo3(item("half_life"))]
+    half_life: Option<f64>,
+    #[pyo3(item("E_iso"))]
+    e_iso: Option<f64>,
+}
+
+/// Build a table of isomeric states from decay data evaluations.
+///
+/// Only the metastable files are needed; ground states are implicit. Keyed by
+/// `(Z, A)` and then by isomeric-state ordinal, matching the Python function.
+#[pyfunction]
+#[pyo3(name = "isomer_table")]
+fn py_isomer_table<'py>(py: Python<'py>, decay_files: Vec<String>) -> PyResult<Bound<'py, PyDict>> {
+    // Read through `read_text` rather than `endf::isomer_table`, so a
+    // compressed evaluation works here as it does everywhere else.
+    let mut materials = Vec::with_capacity(decay_files.len());
+    for filename in &decay_files {
+        materials.push(endf::Material::from_str(&read_text(filename)?).map_err(to_py_err)?);
+    }
+    let table = endf::radionuclide_production::isomer_table_from_materials(&materials);
+
+    let out = PyDict::new(py);
+    for ((z, a), isomers) in table {
+        let by_state = PyDict::new(py);
+        for (liso, isomer) in isomers {
+            let entry = PyDict::new(py);
+            entry.set_item("LIS", isomer.lis)?;
+            entry.set_item("half_life", isomer.half_life)?;
+            entry.set_item("E_iso", isomer.e_iso)?;
+            by_state.set_item(liso, entry)?;
+        }
+        out.set_item((z, a), by_state)?;
+    }
+    Ok(out)
+}
+
+/// Map a production level to an isomeric-state ordinal (LISO).
+#[pyfunction]
+#[pyo3(name = "level_to_isomeric_state")]
+#[pyo3(signature = (Z, A, lfs, excitation_energy, table, *, tol_eV=3000.0))]
+#[allow(non_snake_case)]
+fn py_level_to_isomeric_state(
+    Z: i64,
+    A: i64,
+    lfs: i64,
+    excitation_energy: Option<f64>,
+    table: BTreeMap<(i64, i64), BTreeMap<i64, IsomerEntry>>,
+    tol_eV: f64,
+) -> i64 {
+    let table: endf::radionuclide_production::IsomerTable = table
+        .into_iter()
+        .map(|(key, isomers)| {
+            let isomers = isomers
+                .into_iter()
+                .map(|(liso, e)| {
+                    (
+                        liso,
+                        endf::radionuclide_production::Isomer {
+                            lis: e.lis,
+                            half_life: e.half_life,
+                            e_iso: e.e_iso,
+                        },
+                    )
+                })
+                .collect();
+            (key, isomers)
+        })
+        .collect();
+    endf::radionuclide_production::level_to_isomeric_state(
+        Z,
+        A,
+        lfs,
+        excitation_energy,
+        &table,
+        tol_eV,
+    )
+}
+
 /// The (Z, A, metastable state) a GNDS name denotes, e.g. `zam("Am242_m1")`.
 #[pyfunction]
 #[pyo3(name = "zam")]
@@ -2749,6 +2916,10 @@ fn _endf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_photon_reaction_mt, m)?)?;
     m.add_function(wrap_pyfunction!(py_decay_modes, m)?)?;
     m.add_function(wrap_pyfunction!(py_normalise_branch_ratios, m)?)?;
+    m.add_function(wrap_pyfunction!(py_radionuclide_production, m)?)?;
+    m.add_function(wrap_pyfunction!(py_isomer_table, m)?)?;
+    m.add_function(wrap_pyfunction!(py_level_to_isomeric_state, m)?)?;
+    m.add_class::<PyRadionuclideProduction>()?;
     add_tables(m)?;
     m.add_class::<PyMaterial>()?;
     m.add_class::<PyProduct>()?;
