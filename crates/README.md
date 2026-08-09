@@ -48,11 +48,17 @@ That is the shape a consumer wants anyway — `kind` is exactly the discriminant
 an Arrow union column needs — and it saves a wrapper class per variant for no
 gain in what can be expressed.
 
-**Not a drop-in for `endf.Material.section_data`.** That returns the Python
-reader's own dictionaries, keyed by ENDF field name, one shape per MF. What the
-extension exposes is the typed layer above it: the reactions, nuclides, decay
-data and chains that a consumer actually reads. Code that reaches into
-`material[3, 1]['sigma']` still wants the pure-Python reader.
+`Material.section_data` and `material[3, 1]` are there too, giving back the
+same dictionaries the Python reader does, keyed by the same ENDF field names.
+93% of the sections in the fixtures have one — MF 1, 3, 4, 5, 8, 9, 10, 12, 13,
+14, 15, 23, 27 and 28. A section with no dictionary form is left out of
+`section_data` rather than half-built, and asking for it by key says so.
+
+What is left: MF 2, 6, 7, 26, 33 and 34 have no dictionary yet, and MF=8
+MT=457 does not have one on purpose — decay data is reached through `Decay`,
+which is a better shape. The set is pinned in
+`tests/test_rust_bindings.py::SECTIONS_WITHOUT_A_DICT` and asserted, so it
+cannot drift in either direction.
 
 Paths ending in `.xz` are decompressed, matching `endf.fileutils.open_text`, so
 a path that works in one reader works in the other.

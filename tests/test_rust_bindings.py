@@ -382,3 +382,111 @@ def test_chain_matches():
     ]
     # The evaluated branching ratios are consistent.
     assert chain.validate(1e-4) == []
+
+
+# ---------------------------------------------------------------------------
+# section_data
+#
+# The dictionaries are compared whole and recursively against the Python
+# reader's, on every fixture, so a renamed or missing key fails rather than
+# going unnoticed.
+# ---------------------------------------------------------------------------
+
+
+def compare_values(got, want, where):
+    """Assert two section-dictionary values are the same thing."""
+    import numpy as np
+
+    from endf.function import Tabulated1D, Tabulated2D
+
+    if isinstance(want, Tabulated2D):
+        assert list(got.breakpoints) == list(want.breakpoints), f"{where}.breakpoints"
+        assert list(got.interpolation) == list(want.interpolation), f"{where}.int"
+    elif isinstance(want, Tabulated1D):
+        assert list(got.x) == list(want.x), f"{where}.x"
+        assert list(got.y) == list(want.y), f"{where}.y"
+        assert list(got.breakpoints) == list(want.breakpoints), f"{where}.breakpoints"
+        assert list(got.interpolation) == list(want.interpolation), f"{where}.int"
+    elif isinstance(want, dict):
+        assert sorted(got) == sorted(want), f"{where}: keys"
+        for key in want:
+            compare_values(got[key], want[key], f"{where}[{key!r}]")
+    elif isinstance(want, (list, tuple, np.ndarray)):
+        want = list(want)
+        got = list(got)
+        assert len(got) == len(want), f"{where}: length"
+        for i, (g, w) in enumerate(zip(got, want)):
+            compare_values(g, w, f"{where}[{i}]")
+    elif isinstance(want, (float, np.floating)):
+        assert got == pytest.approx(float(want), rel=1e-15, abs=0.0), where
+    else:
+        assert got == want, where
+
+
+ENDF_FIXTURES = sorted(p.name for p in TESTS.glob("*.endf.xz"))
+
+
+@pytest.mark.parametrize("name", ENDF_FIXTURES)
+def test_section_data_matches(name):
+    reference = endf.Material(fixture(name))
+    material = _endf.Material(fixture(name))
+
+    section_data = material.section_data
+    assert section_data, f"{name}: no section has a dictionary form"
+
+    for key, got in section_data.items():
+        compare_values(got, reference.section_data[key], f"{name} {key}")
+
+    # And the same through the item lookup.
+    for key in section_data:
+        compare_values(material[key], reference.section_data[key], f"{name} {key}")
+
+
+def test_section_data_leaves_out_what_it_cannot_build(am244, rust_am244):
+    # MF=1 MT=458 is parsed but has no dictionary form here, so it is absent
+    # rather than half-built, and asking for it says so.
+    assert (1, 458) in am244.section_data
+    assert (1, 458) not in rust_am244.section_data
+    with pytest.raises(ValueError, match="no dictionary form"):
+        rust_am244[1, 458]
+    # A section that does not exist at all is a different error.
+    with pytest.raises(ValueError, match="no section"):
+        rust_am244[3, 999]
+
+
+#: The files whose sections have no dictionary form in the extension yet.
+#:
+#: MF=8 MT=457 is here by choice: decay data is reached through `Decay`, which
+#: is a better shape than the dictionary. The rest are simply not written yet.
+#: Pinned so the list cannot shrink or grow without saying so.
+SECTIONS_WITHOUT_A_DICT = {
+    (1, 458),
+    (2, 151),
+    (6, 102),
+    (6, 105),
+    (7, 2),
+    (7, 4),
+    (8, 457),
+    (26, 525),
+    (26, 527),
+    (26, 528),
+    (26, 534),
+    (33, 103),
+    (33, 105),
+    (34, 51),
+}
+
+
+def test_the_uncovered_section_list_is_accurate():
+    missing = set()
+    for name in ENDF_FIXTURES:
+        reference = endf.Material(fixture(name))
+        material = _endf.Material(fixture(name))
+        have = set(material.section_data)
+        missing |= {key for key in reference.section_data if key not in have}
+
+    assert missing == SECTIONS_WITHOUT_A_DICT, (
+        "the set of sections with no dictionary form has changed. If one now "
+        "has one, delete it from SECTIONS_WITHOUT_A_DICT; if a projection "
+        "broke, that is the bug."
+    )

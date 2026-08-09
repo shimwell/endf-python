@@ -21,6 +21,7 @@ use endf::angle_energy::AngleEnergy;
 use endf::mf::mf4::{AngleAtEnergy, AngleDistribution};
 use endf::mf::mf5::EnergyDistribution;
 use endf::univariate::Univariate;
+use endf::Section;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -145,6 +146,30 @@ impl PyTabulated1D {
     }
 }
 
+/// Interpolation metadata for a two-dimensional function (the format's TAB2).
+#[pyclass(name = "Tabulated2D", module = "endf._endf")]
+#[derive(Clone)]
+struct PyTabulated2D {
+    inner: endf::Tabulated2D,
+}
+
+#[pymethods]
+impl PyTabulated2D {
+    #[getter]
+    fn breakpoints(&self) -> Vec<i32> {
+        self.inner.breakpoints.clone()
+    }
+
+    #[getter]
+    fn interpolation(&self) -> Vec<i32> {
+        self.inner.interpolation.clone()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<Tabulated2D: {} regions>", self.inner.breakpoints.len())
+    }
+}
+
 /// An MF=3 reaction cross section.
 #[pyclass(name = "CrossSection", module = "endf._endf")]
 #[derive(Clone)]
@@ -240,6 +265,38 @@ impl PyMaterial {
         self.inner.section_text.clone()
     }
 
+    /// Every section as the Python reader's dictionaries, keyed by (MF, MT).
+    ///
+    /// Sections with no dictionary form here are left out rather than
+    /// half-built; they are reached through the object layer, which covers
+    /// every file.
+    #[getter]
+    fn section_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let out = PyDict::new(py);
+        for (&key, section) in &self.inner.section_data {
+            if let Some(d) = section_dict(py, section)? {
+                out.set_item(key, d)?;
+            }
+        }
+        Ok(out)
+    }
+
+    /// One section's dictionary, as `material[3, 1]` gives it.
+    fn __getitem__<'py>(&self, py: Python<'py>, key: (i32, i32)) -> PyResult<Bound<'py, PyDict>> {
+        let (mf, mt) = key;
+        let section = self
+            .inner
+            .section_data
+            .get(&key)
+            .ok_or_else(|| PyValueError::new_err(format!("no section MF={mf} MT={mt}")))?;
+        section_dict(py, section)?.ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "MF={mf} MT={mt} has no dictionary form here; the typed \
+                 accessors and the object layer reach it instead"
+            ))
+        })
+    }
+
     /// The MF=3 cross section for a reaction, or None.
     fn mf3(&self, mt: i32) -> Option<PyCrossSection> {
         self.inner
@@ -258,6 +315,502 @@ impl PyMaterial {
             self.inner.section_text.len()
         )
     }
+}
+
+// ---------------------------------------------------------------------------
+// section_data
+//
+// The Python reader hands back a dictionary per section, keyed by the field
+// names the format uses. This rebuilds those dictionaries from the typed
+// sections, so code written against `Material.section_data` keeps working.
+//
+// Not every file has a projection yet — `section_dict` says which by name
+// rather than returning something incomplete. The typed accessors and the
+// object layer above them cover every file regardless.
+// ---------------------------------------------------------------------------
+
+fn tab1_class(t: &endf::Tabulated1D) -> PyTabulated1D {
+    PyTabulated1D { inner: t.clone() }
+}
+
+fn tab2_class(t: &endf::Tabulated2D) -> PyTabulated2D {
+    PyTabulated2D { inner: t.clone() }
+}
+
+fn nu_into(d: &Bound<'_, PyDict>, nu: &endf::mf::mf1::Nu) -> PyResult<()> {
+    match nu {
+        endf::mf::mf1::Nu::Polynomial(c) => d.set_item("C", c.clone())?,
+        endf::mf::mf1::Nu::Tabulated(t) => d.set_item("nu", tab1_class(t))?,
+        endf::mf::mf1::Nu::Absent => {}
+    }
+    Ok(())
+}
+
+fn mf1_mt451_dict<'py>(
+    py: Python<'py>,
+    s: &endf::mf::mf1::Mf1Mt451,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    for (key, value) in [
+        ("ZA", s.za),
+        ("LRP", s.lrp),
+        ("LFI", s.lfi),
+        ("NLIB", s.nlib),
+        ("NMOD", s.nmod),
+        ("LIS", s.lis),
+        ("LISO", s.liso),
+        ("NFOR", s.nfor),
+        ("LREL", s.lrel),
+        ("NSUB", s.nsub),
+        ("NVER", s.nver),
+        ("LDRV", s.ldrv),
+        ("NWD", s.nwd),
+        ("NXC", s.nxc),
+    ] {
+        d.set_item(key, value)?;
+    }
+    for (key, value) in [
+        ("AWR", s.awr),
+        ("ELIS", s.elis),
+        ("STA", s.sta),
+        ("AWI", s.awi),
+        ("EMAX", s.emax),
+        ("TEMP", s.temp),
+    ] {
+        d.set_item(key, value)?;
+    }
+    // The descriptive text is present only when the evaluation wrote it.
+    if let Some(zsymam) = &s.zsymam {
+        d.set_item("ZSYMAM", zsymam)?;
+        d.set_item("ALAB", &s.alab)?;
+        d.set_item("EDATE", &s.edate)?;
+        d.set_item("AUTH", &s.auth)?;
+        d.set_item("REF", &s.reference)?;
+        d.set_item("DDATE", &s.ddate)?;
+        d.set_item("RDATE", &s.rdate)?;
+        d.set_item("ENDATE", &s.endate)?;
+        d.set_item("HSUB", s.hsub.clone())?;
+        d.set_item("description", s.description.clone())?;
+    }
+    d.set_item("section_list", s.section_list.clone())?;
+    Ok(d)
+}
+
+fn mf3_dict<'py>(py: Python<'py>, s: &endf::mf::mf3::Mf3) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("QM", s.qm)?;
+    d.set_item("QI", s.qi)?;
+    d.set_item("LR", s.lr)?;
+    d.set_item("sigma", tab1_class(&s.sigma))?;
+    Ok(d)
+}
+
+fn mf4_dict<'py>(py: Python<'py>, s: &endf::mf::mf4::Mf4) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LTT", s.ltt)?;
+    d.set_item("LI", s.li)?;
+    d.set_item("LCT", s.lct)?;
+    if let Some(l) = &s.legendre {
+        let sub = PyDict::new(py);
+        sub.set_item("E_int", tab2_class(&l.e_int))?;
+        sub.set_item("T", l.t)?;
+        sub.set_item("LT", l.lt)?;
+        sub.set_item("E", l.energy.clone())?;
+        sub.set_item("a_l", l.a_l.clone())?;
+        d.set_item("legendre", sub)?;
+    }
+    if let Some(t) = &s.tabulated {
+        let sub = PyDict::new(py);
+        sub.set_item("E_int", tab2_class(&t.e_int))?;
+        sub.set_item("T", t.t)?;
+        sub.set_item("LT", t.lt)?;
+        sub.set_item("E", t.energy.clone())?;
+        sub.set_item("mu", t.mu.iter().map(tab1_class).collect::<Vec<_>>())?;
+        d.set_item("tabulated", sub)?;
+    }
+    Ok(d)
+}
+
+fn mf5_dict<'py>(py: Python<'py>, s: &endf::mf::mf5::Mf5) -> PyResult<Bound<'py, PyDict>> {
+    use endf::mf::mf5::EnergyDistribution as E;
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("NK", s.nk)?;
+    let mut subsections = Vec::with_capacity(s.subsections.len());
+    for sub in &s.subsections {
+        let entry = PyDict::new(py);
+        entry.set_item("LF", sub.lf)?;
+        entry.set_item("p", tab1_class(&sub.p))?;
+        let dist = PyDict::new(py);
+        match &sub.distribution {
+            E::ArbitraryTabulated { e_int, energy, g } => {
+                dist.set_item("E_int", tab2_class(e_int))?;
+                dist.set_item("E", energy.clone())?;
+                dist.set_item("g", g.iter().map(tab1_class).collect::<Vec<_>>())?;
+            }
+            E::GeneralEvaporation { u, theta, g } => {
+                dist.set_item("U", *u)?;
+                dist.set_item("theta", tab1_class(theta))?;
+                dist.set_item("g", tab1_class(g))?;
+            }
+            E::MaxwellEnergy { u, theta } | E::Evaporation { u, theta } => {
+                dist.set_item("U", *u)?;
+                dist.set_item("theta", tab1_class(theta))?;
+            }
+            E::WattEnergy { u, a, b } => {
+                dist.set_item("U", *u)?;
+                dist.set_item("a", tab1_class(a))?;
+                dist.set_item("b", tab1_class(b))?;
+            }
+            E::MadlandNix { efl, efh, t_m } => {
+                dist.set_item("EFL", *efl)?;
+                dist.set_item("EFH", *efh)?;
+                dist.set_item("T_M", tab1_class(t_m))?;
+            }
+            // The three ACE-only laws have no ENDF section and so never reach
+            // here; `dist` stays empty rather than inventing keys.
+            _ => {}
+        }
+        entry.set_item("distribution", dist)?;
+        subsections.push(entry);
+    }
+    d.set_item("subsections", subsections)?;
+    Ok(d)
+}
+
+fn mf9_mf10_dict<'py>(py: Python<'py>, s: &endf::mf::mf8::Mf9Mf10) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LIS", s.lis)?;
+    d.set_item("NS", s.ns)?;
+    let key = if s.mf == 9 { "Y" } else { "sigma" };
+    let levels: PyResult<Vec<_>> = s
+        .levels
+        .iter()
+        .map(|level| {
+            let e = PyDict::new(py);
+            e.set_item("QM", level.qm)?;
+            e.set_item("QI", level.qi)?;
+            e.set_item("IZAP", level.izap)?;
+            e.set_item("LFS", level.lfs)?;
+            e.set_item(key, tab1_class(&level.func))?;
+            Ok(e)
+        })
+        .collect();
+    d.set_item("levels", levels?)?;
+    Ok(d)
+}
+
+fn mf1_mt452_dict<'py>(
+    py: Python<'py>,
+    s: &endf::mf::mf1::Mf1Mt452,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LNU", s.lnu)?;
+    nu_into(&d, &s.nu)?;
+    Ok(d)
+}
+
+fn mf1_mt455_dict<'py>(
+    py: Python<'py>,
+    s: &endf::mf::mf1::Mf1Mt455,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LDG", s.ldg)?;
+    d.set_item("LNU", s.lnu)?;
+    if !s.lambda.is_empty() {
+        d.set_item("lambda", s.lambda.clone())?;
+    }
+    if let Some(e_int) = &s.e_int {
+        d.set_item("E_int", tab2_class(e_int))?;
+    }
+    if !s.constants.is_empty() {
+        let constants: PyResult<Vec<_>> = s
+            .constants
+            .iter()
+            .map(|c| {
+                let e = PyDict::new(py);
+                e.set_item("E", c.energy)?;
+                e.set_item("lambda", c.lambda.clone())?;
+                e.set_item("alpha", c.alpha.clone())?;
+                Ok(e)
+            })
+            .collect();
+        d.set_item("constants", constants?)?;
+    }
+    nu_into(&d, &s.nu)?;
+    Ok(d)
+}
+
+fn mf12_dict<'py>(py: Python<'py>, s: &endf::mf::photon::Mf12) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LO", s.lo)?;
+    d.set_item("NK", s.nk)?;
+    if let Some(y) = &s.total_yield {
+        d.set_item("Y", tab1_class(y))?;
+    }
+    if !s.multiplicities.is_empty() {
+        let ks: PyResult<Vec<_>> = s
+            .multiplicities
+            .iter()
+            .map(|k| {
+                let e = PyDict::new(py);
+                e.set_item("Eg", k.eg)?;
+                e.set_item("ES", k.es)?;
+                e.set_item("LP", k.lp)?;
+                e.set_item("LF", k.lf)?;
+                e.set_item("y", tab1_class(&k.y))?;
+                Ok(e)
+            })
+            .collect();
+        d.set_item("multiplicities", ks?)?;
+    }
+    if let Some(lg) = s.lg {
+        d.set_item("LG", lg)?;
+        d.set_item("ES_NS", s.es_ns)?;
+        d.set_item("LP", s.lp)?;
+        d.set_item("NT", s.nt)?;
+        let ts: PyResult<Vec<_>> = s
+            .transitions
+            .iter()
+            .map(|t| {
+                let e = PyDict::new(py);
+                e.set_item("ES", t.es)?;
+                e.set_item("TP", t.tp)?;
+                if let Some(gp) = t.gp {
+                    e.set_item("GP", gp)?;
+                }
+                Ok(e)
+            })
+            .collect();
+        d.set_item("transitions", ts?)?;
+    }
+    Ok(d)
+}
+
+fn mf13_dict<'py>(py: Python<'py>, s: &endf::mf::photon::Mf13) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("NK", s.nk)?;
+    if let Some(t) = &s.sigma_total {
+        d.set_item("sigma_total", tab1_class(t))?;
+    }
+    let photons: PyResult<Vec<_>> = s
+        .photons
+        .iter()
+        .map(|p| {
+            let e = PyDict::new(py);
+            e.set_item("EG", p.eg)?;
+            e.set_item("ES", p.es)?;
+            e.set_item("LP", p.lp)?;
+            e.set_item("LF", p.lf)?;
+            e.set_item("sigma", tab1_class(&p.sigma))?;
+            Ok(e)
+        })
+        .collect();
+    d.set_item("photons", photons?)?;
+    Ok(d)
+}
+
+fn mf14_dict<'py>(py: Python<'py>, s: &endf::mf::photon::Mf14) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LI", s.li)?;
+    d.set_item("NK", s.nk)?;
+    if let (Some(ltt), Some(ni)) = (s.ltt, s.ni) {
+        d.set_item("LTT", ltt)?;
+        d.set_item("NI", ni)?;
+    }
+    if !s.subsections.is_empty() {
+        let subs: PyResult<Vec<_>> = s
+            .subsections
+            .iter()
+            .map(|sub| {
+                let e = PyDict::new(py);
+                e.set_item("EG", sub.eg)?;
+                e.set_item("ES", sub.es)?;
+                if let Some(e_int) = &sub.e_int {
+                    e.set_item("E_int", tab2_class(e_int))?;
+                    e.set_item("NE", sub.ne)?;
+                    e.set_item("E", sub.energy.clone())?;
+                }
+                if !sub.nl.is_empty() {
+                    e.set_item("NL", sub.nl.clone())?;
+                }
+                if !sub.a_lk.is_empty() {
+                    e.set_item("a_lk", sub.a_lk.clone())?;
+                }
+                if !sub.p_k.is_empty() {
+                    e.set_item("p_k", sub.p_k.iter().map(tab1_class).collect::<Vec<_>>())?;
+                }
+                Ok(e)
+            })
+            .collect();
+        d.set_item("subsections", subs?)?;
+    }
+    Ok(d)
+}
+
+fn mf15_dict<'py>(py: Python<'py>, s: &endf::mf::photon::Mf15) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("NC", s.nc)?;
+    let subs: PyResult<Vec<_>> = s
+        .subsections
+        .iter()
+        .map(|sub| {
+            let e = PyDict::new(py);
+            e.set_item("LF", sub.lf)?;
+            e.set_item("p", tab1_class(&sub.p))?;
+            e.set_item("E_int", tab2_class(&sub.e_int))?;
+            e.set_item("NE", sub.ne)?;
+            e.set_item("E", sub.energy.clone())?;
+            e.set_item("g", sub.g.iter().map(tab1_class).collect::<Vec<_>>())?;
+            Ok(e)
+        })
+        .collect();
+    d.set_item("subsections", subs?)?;
+    Ok(d)
+}
+
+fn mf23_dict<'py>(py: Python<'py>, s: &endf::mf::atomic::Mf23) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("EPE", s.epe)?;
+    d.set_item("EFL", s.efl)?;
+    d.set_item("sigma", tab1_class(&s.sigma))?;
+    Ok(d)
+}
+
+fn mf27_dict<'py>(py: Python<'py>, s: &endf::mf::atomic::Mf27) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("Z", s.z)?;
+    d.set_item("H", tab1_class(&s.h))?;
+    Ok(d)
+}
+
+fn mf28_dict<'py>(py: Python<'py>, s: &endf::mf::atomic::Mf28) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("NSS", s.nss)?;
+    let shells: PyResult<Vec<_>> = s
+        .shells
+        .iter()
+        .map(|shell| {
+            let e = PyDict::new(py);
+            e.set_item("SUBI", shell.subi)?;
+            e.set_item("NTR", shell.ntr)?;
+            e.set_item("EBI", shell.ebi)?;
+            e.set_item("ELN", shell.eln)?;
+            e.set_item("SUBJ", shell.subj.clone())?;
+            e.set_item("SUBK", shell.subk.clone())?;
+            e.set_item("ETR", shell.etr.clone())?;
+            e.set_item("FTR", shell.ftr.clone())?;
+            Ok(e)
+        })
+        .collect();
+    d.set_item("shells", shells?)?;
+    Ok(d)
+}
+
+fn mf8_dict<'py>(py: Python<'py>, s: &endf::mf::mf8::Mf8) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LIS", s.lis)?;
+    d.set_item("LISO", s.liso)?;
+    d.set_item("NS", s.ns)?;
+    d.set_item("NO", s.no)?;
+    let subs: PyResult<Vec<_>> = s
+        .subsections
+        .iter()
+        .map(|sub| {
+            let e = PyDict::new(py);
+            e.set_item("ZAP", sub.zap)?;
+            e.set_item("ELFS", sub.elfs)?;
+            e.set_item("LMF", sub.lmf)?;
+            e.set_item("LFS", sub.lfs)?;
+            // The decay chain of the product is present only when the
+            // evaluation wrote one.
+            if let Some(nd) = sub.nd {
+                e.set_item("ND", nd)?;
+                e.set_item("HL", sub.hl.clone())?;
+                e.set_item("RTYP", sub.rtyp.clone())?;
+                e.set_item("ZAN", sub.zan.clone())?;
+                e.set_item("BR", sub.br.clone())?;
+                e.set_item("END", sub.end.clone())?;
+                e.set_item("CT", sub.ct.clone())?;
+            }
+            Ok(e)
+        })
+        .collect();
+    d.set_item("subsections", subs?)?;
+    Ok(d)
+}
+
+fn mf1_mt460_dict<'py>(
+    py: Python<'py>,
+    s: &endf::mf::mf1::Mf1Mt460,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LO", s.lo)?;
+    if s.lo == 1 {
+        d.set_item("NG", s.ng)?;
+        d.set_item("E", s.energy.clone())?;
+        d.set_item("T", s.time.iter().map(tab1_class).collect::<Vec<_>>())?;
+    }
+    if s.lo == 2 {
+        d.set_item("lambda", s.lambda.clone())?;
+    }
+    Ok(d)
+}
+
+/// One section as the Python reader's dictionary, where there is one.
+///
+/// `None` for a section whose dictionary shape has not been written. Those
+/// are reachable through the typed accessors and the object layer; what is
+/// missing is only the dictionary form the Python reader happens to use.
+fn section_dict<'py>(py: Python<'py>, section: &Section) -> PyResult<Option<Bound<'py, PyDict>>> {
+    Ok(Some(match section {
+        Section::Mf1Mt451(s) => mf1_mt451_dict(py, s)?,
+        Section::Mf1Mt452(s) => mf1_mt452_dict(py, s)?,
+        Section::Mf1Mt455(s) => mf1_mt455_dict(py, s)?,
+        Section::Mf1Mt460(s) => mf1_mt460_dict(py, s)?,
+        Section::Mf8(s) => mf8_dict(py, s)?,
+        Section::Mf3(s) => mf3_dict(py, s)?,
+        Section::Mf4(s) => mf4_dict(py, s)?,
+        Section::Mf5(s) => mf5_dict(py, s)?,
+        Section::Mf9Mf10(s) => mf9_mf10_dict(py, s)?,
+        Section::Mf12(s) => mf12_dict(py, s)?,
+        Section::Mf13(s) => mf13_dict(py, s)?,
+        Section::Mf14(s) => mf14_dict(py, s)?,
+        Section::Mf15(s) => mf15_dict(py, s)?,
+        Section::Mf23(s) => mf23_dict(py, s)?,
+        Section::Mf27(s) => mf27_dict(py, s)?,
+        Section::Mf28(s) => mf28_dict(py, s)?,
+        _ => return Ok(None),
+    }))
 }
 
 /// Read every material in an ENDF-6 file.
@@ -1246,6 +1799,7 @@ fn _endf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyIncidentPhoton>()?;
     m.add_class::<PyDecay>()?;
     m.add_class::<PyChain>()?;
+    m.add_class::<PyTabulated2D>()?;
     m.add_class::<PyAceTable>()?;
     Ok(())
 }
