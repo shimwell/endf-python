@@ -364,6 +364,92 @@ impl Mixture {
     }
 }
 
+/// Combine distributions, each weighted by a probability or an intensity.
+///
+/// Several [`Discrete`] distributions merge into one; the rest go into a
+/// [`Mixture`]. A `Mixture` in the input is flattened first, so the result is
+/// never nested.
+///
+/// [`Uniform`] is not accepted: the Python reader type-checks it out, and
+/// nothing produces one here. It is folded into a [`Tabular`] by
+/// [`Uniform::to_tabular`] if a caller needs it combined.
+pub fn combine_distributions(dists: &[Univariate], probs: &[f64]) -> Result<Univariate> {
+    if dists.len() != probs.len() {
+        return Err(Error::Mismatched {
+            what: "number of distributions and probabilities",
+        });
+    }
+
+    // Flatten any mixture, scaling its components by its own weight.
+    let mut flat: Vec<(f64, &Univariate)> = Vec::new();
+    for (dist, &prob) in dists.iter().zip(probs) {
+        match dist {
+            Univariate::Mixture(m) => {
+                for (&p, d) in m.probability.iter().zip(&m.distribution) {
+                    flat.push((prob * p, d));
+                }
+            }
+            _ => flat.push((prob, dist)),
+        }
+    }
+
+    let mut discrete: Vec<Discrete> = Vec::new();
+    let mut discrete_probs: Vec<f64> = Vec::new();
+    let mut continuous: Vec<Univariate> = Vec::new();
+    let mut continuous_probs: Vec<f64> = Vec::new();
+    for (prob, dist) in flat {
+        match dist {
+            Univariate::Discrete(d) => {
+                discrete.push(d.clone());
+                discrete_probs.push(prob);
+            }
+            Univariate::Tabular(_) => {
+                continuous.push(dist.clone());
+                continuous_probs.push(prob);
+            }
+            other => {
+                return Err(Error::Unsupported {
+                    what: match other {
+                        Univariate::Uniform(_) => "combining a uniform distribution",
+                        _ => "combining a nested mixture",
+                    },
+                })
+            }
+        }
+    }
+
+    if !discrete.is_empty() {
+        let merged = Univariate::Discrete(Discrete::merge(&discrete, &discrete_probs)?);
+        if continuous.is_empty() {
+            return Ok(merged);
+        }
+        // The merged discrete distribution already carries its weights, so it
+        // enters the mixture with a probability of one.
+        continuous_probs.push(1.0);
+        continuous.push(merged);
+        return Ok(Univariate::Mixture(Mixture::new(
+            continuous_probs,
+            continuous,
+        )));
+    }
+
+    if continuous.len() == 1 {
+        let Univariate::Tabular(t) = &continuous[0] else {
+            unreachable!("only tabular distributions reach here");
+        };
+        let mut scaled = t.clone();
+        for v in &mut scaled.p {
+            *v *= continuous_probs[0];
+        }
+        return Ok(Univariate::Tabular(scaled));
+    }
+
+    Ok(Univariate::Mixture(Mixture::new(
+        continuous_probs,
+        continuous,
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1232,6 +1232,89 @@ def dump(path: Path, out) -> None:
         dump_radionuclide_production(d, f"{m}/production", material)
         dump_reactions(d, f"{m}/reaction", material)
         dump_incident_neutron_endf(d, f"{m}/nuclide", material)
+        dump_decay(d, f"{m}/decay", material)
+
+
+def dump_decay(d: Dump, path: str, material) -> None:
+    """Radioactive decay data, and the fission product yields beside it."""
+    from endf.decay import Decay, FissionProductYields
+
+    if (8, 457) in material.section_text:
+        dump_decay_section(d, path, Decay(material))
+    if (8, 454) in material.section_text or (8, 459) in material.section_text:
+        fpy = FissionProductYields(material)
+        d.floats(f"{path}/fpy/energies", fpy.energies)
+        for kind in ("independent", "cumulative"):
+            for i, yields in enumerate(getattr(fpy, kind)):
+                for j, (name, value) in enumerate(sorted(yields.items())):
+                    yp = f"{path}/fpy/{kind}/{i}/{j}"
+                    d.text(f"{yp}/name", name)
+                    d.floats(f"{yp}/yield", [value.n, value.s])
+
+
+def dump_decay_section(d: Dump, path: str, decay) -> None:
+    n = decay.nuclide
+    d.text(f"{path}/name", n["name"])
+    for key in ("atomic_number", "mass_number", "isomeric_state", "excited_state"):
+        d.int(f"{path}/{key}", n[key])
+    d.float(f"{path}/mass", n["mass"])
+    d.int(f"{path}/stable", int(n["stable"]))
+    if n["spin"] is not None:
+        d.float(f"{path}/spin", n["spin"])
+    d.float(f"{path}/parity", n["parity"])
+
+    if not n["stable"]:
+        d.floats(f"{path}/half_life", [decay.half_life.n, decay.half_life.s])
+        c = decay.decay_constant
+        d.floats(f"{path}/decay_constant", [c.n, c.s])
+    e = decay.decay_energy
+    d.floats(f"{path}/decay_energy", [e.n, e.s])
+    for key, value in sorted(decay.average_energies.items()):
+        d.floats(f"{path}/average_energies/{key}", [value.n, value.s])
+
+    for i, mode in enumerate(decay.modes):
+        mp = f"{path}/modes/{i}"
+        d.text(f"{mp}/parent", mode.parent)
+        d.text(f"{mp}/modes", ",".join(mode.modes))
+        d.text(f"{mp}/daughter", mode.daughter)
+        d.floats(f"{mp}/energy", [mode.energy.n, mode.energy.s])
+        d.floats(
+            f"{mp}/branching_ratio", [mode.branching_ratio.n, mode.branching_ratio.s]
+        )
+
+    for radiation, spectrum in sorted(decay.spectra.items()):
+        sp = f"{path}/spectra/{radiation}"
+        d.text(f"{sp}/continuous_flag", spectrum["continuous_flag"])
+        for key in (
+            "discrete_normalization",
+            "energy_average",
+            "continuous_normalization",
+        ):
+            d.floats(f"{sp}/{key}", [spectrum[key].n, spectrum[key].s])
+        for j, line in enumerate(spectrum.get("discrete", [])):
+            lp = f"{sp}/discrete/{j}"
+            d.floats(f"{lp}/energy", [line["energy"].n, line["energy"].s])
+            d.text(f"{lp}/from_mode", ",".join(line["from_mode"]))
+            if line["type"] is not None:
+                d.text(f"{lp}/type", line["type"])
+            d.floats(f"{lp}/intensity", [line["intensity"].n, line["intensity"].s])
+            for key in (
+                "positron_intensity",
+                "internal_pair",
+                "total_internal_conversion",
+                "k_shell_conversion",
+                "l_shell_conversion",
+            ):
+                if key in line:
+                    d.floats(f"{lp}/{key}", [line[key].n, line[key].s])
+        if "continuous" in spectrum:
+            d.text(
+                f"{sp}/continuous_from_mode", ",".join(spectrum["continuous"]["type"])
+            )
+            d.tab1(f"{sp}/continuous", spectrum["continuous"]["probability"])
+
+    for particle, dist in sorted(decay.sources.items()):
+        dump_univariate(d, f"{path}/sources/{particle}", dist)
 
 
 def dump_incident_neutron_endf(d: Dump, path: str, material) -> None:

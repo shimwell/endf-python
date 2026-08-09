@@ -901,6 +901,124 @@ fn dump_incident_neutron_ace(d: &mut Dump, path: &str, t: &ace::Table) {
     }
 }
 
+/// Mirrors `dump_decay` in `tools/dump_golden.py`.
+fn dump_decay(d: &mut Dump, path: &str, material: &Material) {
+    if material.mf8_mt457().is_some() {
+        dump_decay_section(d, path, &endf::Decay::from_material(material).unwrap());
+    }
+    if material.mf8_mt454(454).is_some() || material.mf8_mt454(459).is_some() {
+        let fpy = endf::FissionProductYields::from_material(material).unwrap();
+        d.floats(format!("{path}/fpy/energies"), fpy.energies.clone());
+        for (kind, sets) in [
+            ("independent", &fpy.independent),
+            ("cumulative", &fpy.cumulative),
+        ] {
+            for (i, yields) in sets.iter().enumerate() {
+                // Sorted by name, as the Python dumper walks a dict.
+                let mut yields = yields.clone();
+                yields.sort_by(|a, b| a.name.cmp(&b.name));
+                for (j, product) in yields.iter().enumerate() {
+                    let yp = format!("{path}/fpy/{kind}/{i}/{j}");
+                    d.text(format!("{yp}/name"), &product.name);
+                    d.floats(
+                        format!("{yp}/yield"),
+                        vec![product.yield_.0, product.yield_.1],
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Mirrors `dump_decay_section` in `tools/dump_golden.py`.
+fn dump_decay_section(d: &mut Dump, path: &str, decay: &endf::Decay) {
+    let pair = |v: (f64, f64)| vec![v.0, v.1];
+    let n = &decay.nuclide;
+    d.text(format!("{path}/name"), &n.name);
+    d.int(format!("{path}/atomic_number"), n.atomic_number);
+    d.int(format!("{path}/mass_number"), n.mass_number);
+    d.int(format!("{path}/isomeric_state"), n.isomeric_state);
+    d.int(format!("{path}/excited_state"), n.excited_state);
+    d.float(format!("{path}/mass"), n.mass);
+    d.int(format!("{path}/stable"), i64::from(n.stable));
+    if let Some(spin) = n.spin {
+        d.float(format!("{path}/spin"), spin);
+    }
+    d.float(format!("{path}/parity"), n.parity);
+
+    if !n.stable {
+        d.floats(format!("{path}/half_life"), pair(decay.half_life.unwrap()));
+        d.floats(
+            format!("{path}/decay_constant"),
+            pair(decay.decay_constant().unwrap()),
+        );
+    }
+    d.floats(format!("{path}/decay_energy"), pair(decay.decay_energy()));
+    for (key, value) in &decay.average_energies {
+        d.floats(format!("{path}/average_energies/{key}"), pair(*value));
+    }
+
+    for (i, mode) in decay.modes.iter().enumerate() {
+        let mp = format!("{path}/modes/{i}");
+        d.text(format!("{mp}/parent"), &mode.parent);
+        d.text(format!("{mp}/modes"), &mode.modes.join(","));
+        d.text(format!("{mp}/daughter"), &mode.daughter().unwrap());
+        d.floats(format!("{mp}/energy"), pair(mode.energy));
+        d.floats(format!("{mp}/branching_ratio"), pair(mode.branching_ratio));
+    }
+
+    for (radiation, spectrum) in &decay.spectra {
+        let sp = format!("{path}/spectra/{radiation}");
+        d.text(
+            format!("{sp}/continuous_flag"),
+            spectrum.continuous_flag.name(),
+        );
+        d.floats(
+            format!("{sp}/discrete_normalization"),
+            pair(spectrum.discrete_normalization),
+        );
+        d.floats(
+            format!("{sp}/energy_average"),
+            pair(spectrum.energy_average),
+        );
+        d.floats(
+            format!("{sp}/continuous_normalization"),
+            pair(spectrum.continuous_normalization),
+        );
+        for (j, line) in spectrum.discrete.iter().enumerate() {
+            let lp = format!("{sp}/discrete/{j}");
+            d.floats(format!("{lp}/energy"), pair(line.energy));
+            d.text(format!("{lp}/from_mode"), &line.from_mode.join(","));
+            if let Some(kind) = line.transition_type {
+                d.text(format!("{lp}/type"), kind);
+            }
+            d.floats(format!("{lp}/intensity"), pair(line.intensity));
+            for (key, value) in [
+                ("positron_intensity", line.positron_intensity),
+                ("internal_pair", line.internal_pair),
+                ("total_internal_conversion", line.total_internal_conversion),
+                ("k_shell_conversion", line.k_shell_conversion),
+                ("l_shell_conversion", line.l_shell_conversion),
+            ] {
+                if let Some(value) = value {
+                    d.floats(format!("{lp}/{key}"), pair(value));
+                }
+            }
+        }
+        if let Some(continuous) = &spectrum.continuous {
+            d.text(
+                format!("{sp}/continuous_from_mode"),
+                &spectrum.continuous_from_mode.join(","),
+            );
+            d.tab1(&format!("{sp}/continuous"), continuous);
+        }
+    }
+
+    for (particle, dist) in decay.sources().unwrap() {
+        dump_univariate(d, &format!("{path}/sources/{particle}"), &dist);
+    }
+}
+
 /// Mirrors `dump_incident_neutron_endf` in `tools/dump_golden.py`.
 fn dump_incident_neutron_endf(d: &mut Dump, path: &str, material: &Material) {
     if material.mf1_mt451().is_none() {
@@ -2003,6 +2121,7 @@ fn check(golden_path: &Path) -> usize {
         dump_radionuclide_production(&mut d, &format!("{m}/production"), material);
         dump_reactions(&mut d, &format!("{m}/reaction"), material);
         dump_incident_neutron_endf(&mut d, &format!("{m}/nuclide"), material);
+        dump_decay(&mut d, &format!("{m}/decay"), material);
     }
 
     assert_eq!(sections, g.sections, "{name}: section splitting differs");
