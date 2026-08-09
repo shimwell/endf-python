@@ -138,6 +138,9 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 - **A second ACE table of the same nuclide at another temperature**, which is
   what `add_temperature_from_ace` exists for. Only the "already present" path
   is exercised.
+- **An ACE photoatomic table**, so `IncidentPhoton::from_ace` — the Compton
+  profiles and subshell photoelectric cross sections it reads — is written but
+  unexercised.
 - **A fissile ACE table.** Li6 has no NU block, so the ACE fission path —
   prompt and total nu, the delayed groups and their probabilities — is
   unexercised. So is the URR block on a real table, and MFTYPE=13 photon

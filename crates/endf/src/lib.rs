@@ -27,6 +27,7 @@ pub mod error;
 pub mod fission_energy;
 pub mod function;
 pub mod incident_neutron;
+pub mod incident_photon;
 pub mod material;
 pub mod mf;
 pub mod product;
@@ -48,6 +49,7 @@ pub use error::{Error, Result};
 pub use fission_energy::FissionEnergyRelease;
 pub use function::{Polynomial, Tabulated1D, Tabulated2D};
 pub use incident_neutron::IncidentNeutron;
+pub use incident_photon::{AtomicRelaxation, IncidentPhoton, PhotonReaction};
 pub use material::{get_materials, materials_from_str, Material, Section};
 pub use product::{EmissionMode, Product, Yield};
 pub use radionuclide_production::{

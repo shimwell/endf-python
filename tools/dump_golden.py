@@ -1233,6 +1233,66 @@ def dump(path: Path, out) -> None:
         dump_reactions(d, f"{m}/reaction", material)
         dump_incident_neutron_endf(d, f"{m}/nuclide", material)
         dump_decay(d, f"{m}/decay", material)
+        dump_incident_photon(d, f"{m}/photon", material)
+
+
+def dump_incident_photon(d: Dump, path: str, material) -> None:
+    """The element a photoatomic or atomic-relaxation evaluation describes.
+
+    The Compton profiles and bremsstrahlung the Python class attaches come from
+    an HDF5 file shipped with the package rather than from the evaluation, so
+    they are not dumped: the Rust reader deliberately leaves that auxiliary
+    data to the consumer.
+    """
+    from endf.incident_photon import (
+        PHOTON_REACTION_NAME,
+        AtomicRelaxation,
+        IncidentPhoton,
+    )
+
+    has_photoatomic = any(mf == 23 for mf, _ in material.sections)
+    if has_photoatomic:
+        n = IncidentPhoton.from_endf(material)
+        d.int(f"{path}/atomic_number", n.atomic_number)
+        d.text(f"{path}/name", n.name)
+        d.ints(f"{path}/mts", sorted(n.reactions))
+        for mt in sorted(n.reactions):
+            rx = n.reactions[mt]
+            rp = f"{path}/{mt}"
+            name = PHOTON_REACTION_NAME.get(mt)
+            if name is not None:
+                d.text(f"{rp}/name", name)
+            for key in ("xs", "scattering_factor", "anomalous_real", "anomalous_imag"):
+                value = getattr(rx, key)
+                if value is not None:
+                    d.tab1(f"{rp}/{key}", value)
+            if rx.subshell_binding_energy is not None:
+                d.float(f"{rp}/subshell_binding_energy", rx.subshell_binding_energy)
+            if rx.fluorescence_yield is not None:
+                d.float(f"{rp}/fluorescence_yield", rx.fluorescence_yield)
+            d.ints(f"{rp}/components", n._get_reaction_components(mt))
+
+    if (28, 533) in material.section_data:
+        dump_atomic_relaxation(
+            d, f"{path}/relaxation", AtomicRelaxation.from_endf(material)
+        )
+
+
+def dump_atomic_relaxation(d: Dump, path: str, relaxation) -> None:
+    for i, shell in enumerate(relaxation.subshells):
+        d.text(f"{path}/subshells/{i}", shell)
+    for shell, value in sorted(relaxation.binding_energy.items()):
+        d.float(f"{path}/binding_energy/{shell}", value)
+    for shell, value in sorted(relaxation.num_electrons.items()):
+        d.float(f"{path}/num_electrons/{shell}", value)
+    for shell, t in sorted(relaxation.transitions.items()):
+        tp = f"{path}/transitions/{shell}"
+        for i, s in enumerate(t["secondary_subshell"]):
+            d.text(f"{tp}/secondary/{i}", s)
+        for i, s in enumerate(t["tertiary_subshell"]):
+            d.text(f"{tp}/tertiary/{i}", s)
+        d.floats(f"{tp}/energy", t["energy"])
+        d.floats(f"{tp}/probability", t["probability"])
 
 
 def dump_decay(d: Dump, path: str, material) -> None:

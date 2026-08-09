@@ -901,6 +901,80 @@ fn dump_incident_neutron_ace(d: &mut Dump, path: &str, t: &ace::Table) {
     }
 }
 
+/// Mirrors `dump_incident_photon` in `tools/dump_golden.py`.
+fn dump_incident_photon(d: &mut Dump, path: &str, material: &Material) {
+    let has_photoatomic = material.section_data.keys().any(|&(mf, _)| mf == 23);
+    if has_photoatomic {
+        let n = endf::IncidentPhoton::from_endf(material, None).unwrap();
+        d.int(format!("{path}/atomic_number"), n.atomic_number);
+        d.text(format!("{path}/name"), n.name());
+        let mts: Vec<i32> = n.reactions.keys().copied().collect();
+        d.ints(
+            format!("{path}/mts"),
+            mts.iter().map(|&m| m as i64).collect(),
+        );
+        for mt in &mts {
+            let rx = &n.reactions[mt];
+            let rp = format!("{path}/{mt}");
+            if let Some(name) = rx.name() {
+                d.text(format!("{rp}/name"), name);
+            }
+            for (key, value) in [
+                ("xs", &rx.xs),
+                ("scattering_factor", &rx.scattering_factor),
+                ("anomalous_real", &rx.anomalous_real),
+                ("anomalous_imag", &rx.anomalous_imag),
+            ] {
+                if let Some(value) = value {
+                    d.tab1(&format!("{rp}/{key}"), value);
+                }
+            }
+            if let Some(value) = rx.subshell_binding_energy {
+                d.float(format!("{rp}/subshell_binding_energy"), value);
+            }
+            if let Some(value) = rx.fluorescence_yield {
+                d.float(format!("{rp}/fluorescence_yield"), value);
+            }
+            d.ints(
+                format!("{rp}/components"),
+                n.reaction_components(*mt)
+                    .iter()
+                    .map(|&m| m as i64)
+                    .collect(),
+            );
+        }
+    }
+
+    if material.mf28(533).is_some() {
+        let relaxation = endf::AtomicRelaxation::from_endf(material).unwrap();
+        dump_atomic_relaxation(d, &format!("{path}/relaxation"), &relaxation);
+    }
+}
+
+/// Mirrors `dump_atomic_relaxation` in `tools/dump_golden.py`.
+fn dump_atomic_relaxation(d: &mut Dump, path: &str, relaxation: &endf::AtomicRelaxation) {
+    for (i, shell) in relaxation.subshells().iter().enumerate() {
+        d.text(format!("{path}/subshells/{i}"), shell);
+    }
+    for (shell, value) in &relaxation.binding_energy {
+        d.float(format!("{path}/binding_energy/{shell}"), *value);
+    }
+    for (shell, value) in &relaxation.num_electrons {
+        d.float(format!("{path}/num_electrons/{shell}"), *value);
+    }
+    for (shell, t) in &relaxation.transitions {
+        let tp = format!("{path}/transitions/{shell}");
+        for (i, s) in t.secondary_subshell.iter().enumerate() {
+            d.text(format!("{tp}/secondary/{i}"), s);
+        }
+        for (i, s) in t.tertiary_subshell.iter().enumerate() {
+            d.text(format!("{tp}/tertiary/{i}"), s);
+        }
+        d.floats(format!("{tp}/energy"), t.energy.clone());
+        d.floats(format!("{tp}/probability"), t.probability.clone());
+    }
+}
+
 /// Mirrors `dump_decay` in `tools/dump_golden.py`.
 fn dump_decay(d: &mut Dump, path: &str, material: &Material) {
     if material.mf8_mt457().is_some() {
@@ -2122,6 +2196,7 @@ fn check(golden_path: &Path) -> usize {
         dump_reactions(&mut d, &format!("{m}/reaction"), material);
         dump_incident_neutron_endf(&mut d, &format!("{m}/nuclide"), material);
         dump_decay(&mut d, &format!("{m}/decay"), material);
+        dump_incident_photon(&mut d, &format!("{m}/photon"), material);
     }
 
     assert_eq!(sections, g.sections, "{name}: section splitting differs");
