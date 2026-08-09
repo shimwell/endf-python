@@ -357,9 +357,17 @@ impl Decay {
 
     /// The decay constant in inverse seconds, with its uncertainty.
     ///
-    /// `None` for a stable nuclide, which does not decay.
+    /// `None` for a stable nuclide, and also for one whose half-life the
+    /// evaluation gives as zero. Zero means the half-life was not evaluated,
+    /// not that the nuclide decays instantly — ENDF/B-VIII.0's Xe136 is
+    /// flagged unstable with a half-life of zero, its real one being some
+    /// 10^21 years. `Chain::from_endf` reads it the same way. The Python
+    /// property divides by it and raises `ZeroDivisionError`; see issue #23.
     pub fn decay_constant(&self) -> Option<WithUncertainty> {
         let (t, sigma) = self.half_life?;
+        if t == 0.0 {
+            return None;
+        }
         let ln2 = std::f64::consts::LN_2;
         Some((ln2 / t, ln2 / (t * t) * sigma))
     }

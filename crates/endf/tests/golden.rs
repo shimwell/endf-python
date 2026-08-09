@@ -1052,10 +1052,10 @@ fn dump_decay_section(d: &mut Dump, path: &str, decay: &endf::Decay) {
 
     if !n.stable {
         d.floats(format!("{path}/half_life"), pair(decay.half_life.unwrap()));
-        d.floats(
-            format!("{path}/decay_constant"),
-            pair(decay.decay_constant().unwrap()),
-        );
+        // A half-life of zero means it was not evaluated; see issue #23.
+        if let Some(constant) = decay.decay_constant() {
+            d.floats(format!("{path}/decay_constant"), pair(constant));
+        }
     }
     d.floats(format!("{path}/decay_energy"), pair(decay.decay_energy()));
     for (key, value) in &decay.average_energies {
@@ -2118,8 +2118,7 @@ fn parse_golden(text: &str, name: &str) -> Golden {
 ///
 /// Shared by the ENDF and ACE paths: a field renamed, dropped or added shows up
 /// as a path on one side and not the other, whatever produced it.
-/// Whether a path holds values produced by evaluating an interpolation rather
-/// than read off the file.
+/// Whether a path holds values computed rather than read off the file.
 ///
 /// Two kinds qualify. `…/evaly` is the sampled interpolation the dump takes of
 /// every TAB1. The reaction yields are the other: a product given by MF=10 as
@@ -2131,7 +2130,15 @@ fn parse_golden(text: &str, name: &str) -> Golden {
 /// passes. It also covers the MF=9 yields, which are read verbatim and would
 /// otherwise be compared exactly.
 fn is_interpolated(path: &str) -> bool {
-    path.ends_with("/evaly") || (path.contains("/reaction/") && path.contains("/yield/f/"))
+    path.ends_with("/evaly")
+        || (path.contains("/reaction/") && path.contains("/yield/f/"))
+        // The propagated uncertainties. The Python package gets these from
+        // `uncertainties`, which accumulates a variance and takes its square
+        // root, where the port applies the derivative directly. The two agree
+        // to the last bit or two, and the nominal values — the first entry of
+        // each pair — are exact either way.
+        || path.ends_with("/decay_constant")
+        || path.ends_with("/decay_energy")
 }
 
 fn compare(name: &str, ours: &BTreeMap<String, Value>, theirs: &BTreeMap<String, Value>) {

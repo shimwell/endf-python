@@ -1325,8 +1325,12 @@ def dump_decay_section(d: Dump, path: str, decay) -> None:
 
     if not n["stable"]:
         d.floats(f"{path}/half_life", [decay.half_life.n, decay.half_life.s])
-        c = decay.decay_constant
-        d.floats(f"{path}/decay_constant", [c.n, c.s])
+        # A half-life of zero means it was not evaluated. The Python property
+        # divides by it and raises; see issue #23. The Rust reader returns
+        # nothing, so there is nothing to compare either way.
+        if decay.half_life.n != 0.0:
+            c = decay.decay_constant
+            d.floats(f"{path}/decay_constant", [c.n, c.s])
     e = decay.decay_energy
     d.floats(f"{path}/decay_energy", [e.n, e.s])
     for key, value in sorted(decay.average_energies.items()):
@@ -1373,8 +1377,9 @@ def dump_decay_section(d: Dump, path: str, decay) -> None:
             )
             d.tab1(f"{sp}/continuous", spectrum["continuous"]["probability"])
 
-    for particle, dist in sorted(decay.sources.items()):
-        dump_univariate(d, f"{path}/sources/{particle}", dist)
+    if n["stable"] or decay.half_life.n != 0.0:
+        for particle, dist in sorted(decay.sources.items()):
+            dump_univariate(d, f"{path}/sources/{particle}", dist)
 
 
 def dump_incident_neutron_endf(d: Dump, path: str, material) -> None:
