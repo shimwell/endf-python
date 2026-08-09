@@ -46,14 +46,14 @@ def test_heatr_asks_for_the_partial_kermas():
 def test_output_dir_must_be_a_directory(tmp_path):
     missing = tmp_path / "nope"
     with pytest.raises(IOError, match="not a directory"):
-        make_ace(TESTS / 'n-095_Am_244.endf', output_dir=missing)
+        make_ace(TESTS / 'n-095_Am_244.endf.xz', output_dir=missing)
 
 
 def test_library_name_comes_from_the_evaluation():
     """The library string appears in NJOY's comment cards and so in the ACE
     file, and is built from NLIB, NVER and LREL."""
     from endf.material import _LIBRARY
-    mat = endf.Material(TESTS / 'n-095_Am_244.endf')
+    mat = endf.Material(TESTS / 'n-095_Am_244.endf.xz')
     metadata = mat.section_data[1, 451]
     library = '{}-{}.{}'.format(_LIBRARY.get(metadata['NLIB'], 'Unknown'),
                                 metadata['NVER'], metadata['LREL'])
@@ -66,7 +66,7 @@ def test_library_name_comes_from_the_evaluation():
 def test_make_ace_writes_a_readable_table(tmp_path):
     """A full run, checked by reading the ACE back."""
     ace_path = tmp_path / "ace"
-    make_ace(TESTS / 'n-095_Am_244.endf', temperatures=[293.6],
+    make_ace(TESTS / 'n-095_Am_244.endf.xz', temperatures=[293.6],
              acer=str(ace_path), output_dir=str(tmp_path))
     assert ace_path.is_file()
 
@@ -85,7 +85,7 @@ def test_make_ace_writes_a_readable_table(tmp_path):
 @pytest.mark.skipif(not HAVE_NJOY, reason="njoy executable not found")
 def test_from_njoy_multiple_temperatures(tmp_path):
     data = endf.IncidentNeutron.from_njoy(
-        TESTS / 'n-095_Am_244.endf', temperatures=[293.6, 900.0],
+        TESTS / 'n-095_Am_244.endf.xz', temperatures=[293.6, 900.0],
         output_dir=str(tmp_path))
 
     assert data.temperatures == ['294K', '900K']

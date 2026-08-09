@@ -1,0 +1,23 @@
+# Present so that `maturin build -m crates/endf-py/Cargo.toml` names the wheel
+# after this crate. Without it maturin falls back to the pyproject.toml in the
+# working directory, which for a build run from the repository root is the pure
+# Python package's — and the wheel comes out called `endf`, shadowing it.
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "endf-py"
+description = "Python bindings for the endf crate"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+dynamic = ["version"]
+
+[tool.maturin]
+# The extension module is imported as `_endf`, alongside the `endf` package
+# rather than inside it, so either reader can be used without the other.
+module-name = "_endf"

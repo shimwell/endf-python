@@ -28,7 +28,7 @@ from typing import Tuple, List, Union, Optional, Iterable, TextIO, Any
 import numpy as np
 
 from .data import ATOMIC_SYMBOL, gnds_name, EV_PER_MEV, K_BOLTZMANN
-from .fileutils import PathLike
+from .fileutils import PathLike, open_binary, open_text
 from .records import ENDF_FLOAT_RE
 import endf
 
@@ -224,7 +224,7 @@ def get_tables(
     # Determine whether file is ASCII or binary
     filename = str(filename)
     try:
-        fh = open(filename, 'rb')
+        fh = open_binary(filename)
         # Grab 10 lines of the library
         sb = b''.join([fh.readline() for i in range(10)])
 
@@ -233,11 +233,11 @@ def get_tables(
 
         # No exception so proceed with ASCII - reopen in non-binary
         fh.close()
-        with open(filename, 'r') as fh:
+        with open_text(filename) as fh:
             return _read_ascii(fh, table_names, verbose)
     except UnicodeDecodeError:
         fh.close()
-        with open(filename, 'rb') as fh:
+        with open_binary(filename) as fh:
             return _read_binary(fh, table_names, verbose)
 
 

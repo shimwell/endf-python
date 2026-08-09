@@ -21,7 +21,7 @@ TESTS = Path(__file__).parent
 @pytest.fixture(scope='module')
 def hydrogen():
     return endf.IncidentPhoton.from_endf(
-        TESTS / 'photoat-001_H_000.endf', TESTS / 'atom-001_H_000.endf')
+        TESTS / 'photoat-001_H_000.endf.xz', TESTS / 'atom-001_H_000.endf.xz')
 
 
 def test_compton_profiles_attached(hydrogen):

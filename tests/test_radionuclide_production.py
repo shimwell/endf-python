@@ -9,7 +9,7 @@ from endf import RadionuclideProduction, radionuclide_production
 def in115():
     # ENDF/B-VIII.1 In115 evaluation trimmed to MF=1/451, the MF=3
     # sections for MT=4/16/102, and the corresponding MF=8/9/10 sections
-    filename = Path(__file__).with_name('n-049_In-115_trimmed.endf')
+    filename = Path(__file__).with_name('n-049_In-115_trimmed.endf.xz')
     return endf.Material(filename)
 
 
@@ -58,6 +58,6 @@ def test_excitation_energy_fallback():
 
 
 def test_material_without_data():
-    filename = Path(__file__).with_name('n-095_Am_244.endf')
+    filename = Path(__file__).with_name('n-095_Am_244.endf.xz')
     material = endf.Material(filename)
     assert radionuclide_production(material) == {}
