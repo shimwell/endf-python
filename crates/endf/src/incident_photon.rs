@@ -236,11 +236,30 @@ pub struct IncidentPhoton {
     pub atomic_number: i64,
     pub reactions: BTreeMap<i32, PhotonReaction>,
     pub atomic_relaxation: Option<AtomicRelaxation>,
-    /// Compton profiles, when the source carried them. An ACE photoatomic
-    /// table does; the ENDF sublibrary does not — the Python package fills
-    /// those in from a shipped HDF5 file, which is auxiliary data rather than
-    /// evaluated data and is left to the consumer here.
+    /// Compton profiles. An ACE photoatomic table carries them; an ENDF
+    /// evaluation does not, so for those they come from the auxiliary
+    /// tabulations via [`IncidentPhoton::add_photon_data`].
     pub compton_profiles: Option<ComptonProfiles>,
+    /// Bremsstrahlung and density-effect data, which no evaluation carries.
+    /// Filled by [`IncidentPhoton::add_photon_data`].
+    pub bremsstrahlung: Option<Bremsstrahlung>,
+}
+
+/// Bremsstrahlung data attached to an element, on the shared grids.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Bremsstrahlung {
+    /// Mean excitation energy, in eV.
+    pub i: f64,
+    pub num_electrons: Vec<f64>,
+    /// Ionization energy of each subshell, in eV.
+    pub ionization_energy: Vec<f64>,
+    /// Incident electron kinetic energies, in eV.
+    pub electron_energy: Vec<f64>,
+    /// Reduced photon energies.
+    pub photon_energy: Vec<f64>,
+    /// Scaled cross sections in barns: one row per electron energy, one
+    /// column per reduced photon energy.
+    pub dcs: Vec<Vec<f64>>,
 }
 
 /// The Compton profiles of an element, by shell.
@@ -254,6 +273,42 @@ pub struct ComptonProfiles {
 }
 
 impl IncidentPhoton {
+    /// Attach the auxiliary Compton profile and bremsstrahlung data.
+    ///
+    /// None of it is in the evaluation: it is looked up by atomic number in
+    /// tabulations that ship alongside, which is what the Python package does
+    /// at the end of `from_endf`. Kept as a separate call here because the
+    /// data lives in files the caller has to find — see
+    /// [`crate::PhotonData`].
+    ///
+    /// Compton profiles already read from an ACE table are left alone, since
+    /// those came from the file being read and are specific to it.
+    pub fn add_photon_data(&mut self, data: &crate::PhotonData) {
+        if let Some(profile) = data.compton.get(&self.atomic_number) {
+            if self.compton_profiles.is_none() {
+                self.compton_profiles = Some(ComptonProfiles {
+                    num_electrons: profile.num_electrons.clone(),
+                    binding_energy: profile.binding_energy.clone(),
+                    j: profile
+                        .j
+                        .iter()
+                        .map(|row| Tabulated1D::new(data.pz.clone(), row.clone()))
+                        .collect(),
+                });
+            }
+        }
+        if let Some(brem) = data.bremsstrahlung.get(&self.atomic_number) {
+            self.bremsstrahlung = Some(Bremsstrahlung {
+                i: brem.i,
+                num_electrons: brem.num_electrons.clone(),
+                ionization_energy: brem.ionization_energy.clone(),
+                electron_energy: data.electron_energy.clone(),
+                photon_energy: data.photon_energy.clone(),
+                dcs: brem.dcs.clone(),
+            });
+        }
+    }
+
     pub fn new(atomic_number: i64) -> IncidentPhoton {
         IncidentPhoton {
             atomic_number,

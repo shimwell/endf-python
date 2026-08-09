@@ -32,10 +32,12 @@ pub mod incident_photon;
 pub mod material;
 pub mod mf;
 pub mod njoy;
+pub mod photon_data;
 pub mod product;
 pub mod radionuclide_production;
 pub mod reaction;
 pub mod records;
+pub mod spline;
 
 #[cfg(test)]
 mod testdata;
@@ -59,6 +61,7 @@ pub use function::{Polynomial, Tabulated1D, Tabulated2D};
 pub use incident_neutron::IncidentNeutron;
 pub use incident_photon::{AtomicRelaxation, IncidentPhoton, PhotonReaction};
 pub use material::{get_materials, materials_from_str, Interpretation, Material, Section};
+pub use photon_data::{ComptonProfile, PhotonData};
 pub use product::{EmissionMode, Product, Yield};
 pub use radionuclide_production::{
     isomer_table, isomer_table_from_materials, level_to_isomeric_state, radionuclide_production,
@@ -66,4 +69,5 @@ pub use radionuclide_production::{
 };
 pub use reaction::{reaction_mt, reaction_name, Reaction, FISSION_MTS};
 pub use records::{float_endf, int_endf, Cont, Head, ListRecord, Matrix, Reader, Tab1, Tab2};
+pub use spline::CubicSpline;
 pub use urr::ProbabilityTables;
