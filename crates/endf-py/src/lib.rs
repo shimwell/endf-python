@@ -483,6 +483,138 @@ fn mf5_dict<'py>(py: Python<'py>, s: &endf::mf::mf5::Mf5) -> PyResult<Bound<'py,
     Ok(d)
 }
 
+/// LAW=1, which MF=6 and MF=26 share.
+fn continuum_energy_angle_dict<'py>(
+    py: Python<'py>,
+    c: &endf::mf::mf6::ContinuumEnergyAngle,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("LANG", c.lang)?;
+    d.set_item("LEP", c.lep)?;
+    d.set_item("NR", c.nr)?;
+    d.set_item("NE", c.ne)?;
+    d.set_item("E_int", tab2_class(&c.e_int))?;
+    d.set_item("E", c.energy.clone())?;
+    let mut subs = Vec::with_capacity(c.distribution.len());
+    for sub in &c.distribution {
+        let e = PyDict::new(py);
+        e.set_item("ND", sub.nd)?;
+        e.set_item("NA", sub.na)?;
+        e.set_item("NW", sub.nw)?;
+        e.set_item("NEP", sub.nep)?;
+        e.set_item("E'", sub.e_out.clone())?;
+        // Python reshapes the list to (NEP, NA + 2) and slices the first
+        // column off; `b` is what is left, so it stays a list of rows here.
+        e.set_item("b", sub.b.clone())?;
+        subs.push(e);
+    }
+    d.set_item("distribution", subs)?;
+    Ok(d)
+}
+
+/// LAW=2, which MF=6 and MF=26 share.
+fn discrete_two_body_dict<'py>(
+    py: Python<'py>,
+    t: &endf::mf::mf6::DiscreteTwoBody,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("NR", t.nr)?;
+    d.set_item("NE", t.ne)?;
+    d.set_item("E_int", tab2_class(&t.e_int))?;
+    d.set_item("E", t.energy.clone())?;
+    let mut subs = Vec::with_capacity(t.distribution.len());
+    for sub in &t.distribution {
+        let e = PyDict::new(py);
+        e.set_item("LANG", sub.lang)?;
+        e.set_item("NW", sub.nw)?;
+        e.set_item("NL", sub.nl)?;
+        e.set_item("A_l", sub.a_l.clone())?;
+        subs.push(e);
+    }
+    d.set_item("distribution", subs)?;
+    Ok(d)
+}
+
+fn mf6_dict<'py>(py: Python<'py>, s: &endf::mf::mf6::Mf6) -> PyResult<Bound<'py, PyDict>> {
+    use endf::mf::mf6::Distribution as D;
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("JP", s.jp)?;
+    d.set_item("LCT", s.lct)?;
+    d.set_item("NK", s.nk)?;
+    let mut products = Vec::with_capacity(s.products.len());
+    for p in &s.products {
+        let e = PyDict::new(py);
+        e.set_item("ZAP", p.zap)?;
+        e.set_item("AWP", p.awp)?;
+        e.set_item("LIP", p.lip)?;
+        e.set_item("LAW", p.law)?;
+        e.set_item("y_i", tab1_class(&p.yield_))?;
+        // LAW<0, 0, 3 and 4 carry no data, and Python leaves the key out
+        // entirely rather than storing an empty distribution.
+        match &p.distribution {
+            D::None => {}
+            D::ContinuumEnergyAngle(c) => {
+                e.set_item("distribution", continuum_energy_angle_dict(py, c)?)?
+            }
+            D::DiscreteTwoBody(t) => e.set_item("distribution", discrete_two_body_dict(py, t)?)?,
+            D::ChargedParticleElastic(c) => {
+                let sub = PyDict::new(py);
+                sub.set_item("SPI", c.spi)?;
+                sub.set_item("LIDP", c.lidp)?;
+                sub.set_item("NE", c.ne)?;
+                sub.set_item("E_int", tab2_class(&c.e_int))?;
+                let mut entries = Vec::with_capacity(c.distribution.len());
+                for x in &c.distribution {
+                    let q = PyDict::new(py);
+                    q.set_item("E", x.energy)?;
+                    q.set_item("LTP", x.ltp)?;
+                    q.set_item("NW", x.nw)?;
+                    q.set_item("NL", x.nl)?;
+                    q.set_item("A", x.a.clone())?;
+                    entries.push(q);
+                }
+                sub.set_item("distribution", entries)?;
+                e.set_item("distribution", sub)?
+            }
+            D::NBodyPhaseSpace { apsx, npsx } => {
+                let sub = PyDict::new(py);
+                sub.set_item("APSX", *apsx)?;
+                sub.set_item("NPSX", *npsx)?;
+                e.set_item("distribution", sub)?
+            }
+            D::LaboratoryAngleEnergy(l) => {
+                let sub = PyDict::new(py);
+                sub.set_item("NE", l.ne)?;
+                sub.set_item("E_int", tab2_class(&l.e_int))?;
+                let mut entries = Vec::with_capacity(l.distribution.len());
+                for x in &l.distribution {
+                    let q = PyDict::new(py);
+                    q.set_item("E", x.energy)?;
+                    q.set_item("NRM", x.nrm)?;
+                    q.set_item("NMU", x.nmu)?;
+                    q.set_item("mu_int", tab2_class(&x.mu_int))?;
+                    let mut mus = Vec::with_capacity(x.mu.len());
+                    for m in &x.mu {
+                        let r = PyDict::new(py);
+                        r.set_item("mu", m.mu)?;
+                        r.set_item("f", tab1_class(&m.f))?;
+                        mus.push(r);
+                    }
+                    q.set_item("mu", mus)?;
+                    entries.push(q);
+                }
+                sub.set_item("distribution", entries)?;
+                e.set_item("distribution", sub)?
+            }
+        }
+        products.push(e);
+    }
+    d.set_item("products", products)?;
+    Ok(d)
+}
+
 fn mf9_mf10_dict<'py>(py: Python<'py>, s: &endf::mf::mf8::Mf9Mf10) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     d.set_item("ZA", s.za)?;
@@ -695,6 +827,166 @@ fn mf23_dict<'py>(py: Python<'py>, s: &endf::mf::atomic::Mf23) -> PyResult<Bound
     d.set_item("EPE", s.epe)?;
     d.set_item("EFL", s.efl)?;
     d.set_item("sigma", tab1_class(&s.sigma))?;
+    Ok(d)
+}
+
+fn mf1_mt458_dict<'py>(
+    py: Python<'py>,
+    s: &endf::mf::mf1::Mf1Mt458,
+) -> PyResult<Bound<'py, PyDict>> {
+    use endf::mf::mf1::FissionEnergyRelease as F;
+    let d = PyDict::new(py);
+    // ZA is a float here, not an int: MT=458 is read with a CONT record
+    // upstream rather than a HEAD one. See issue #14.
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LFC", s.lfc)?;
+    d.set_item("NPLY", s.nply)?;
+    for (name, component) in endf::mf::mf1::FISSION_ENERGY_COMPONENTS
+        .iter()
+        .zip(&s.components)
+    {
+        match component {
+            F::Polynomial(pairs) => d.set_item(*name, pairs.clone())?,
+            F::Tabulated { ldrv, eifc } => {
+                let sub = PyDict::new(py);
+                sub.set_item("LDRV", *ldrv)?;
+                sub.set_item("EIFC", tab1_class(eifc))?;
+                d.set_item(*name, sub)?
+            }
+        }
+    }
+    // NFC only appears when the section carries tabulated components.
+    if s.lfc == 1 {
+        d.set_item("NFC", s.nfc)?;
+    }
+    Ok(d)
+}
+
+fn mf7_mt2_dict<'py>(py: Python<'py>, s: &endf::mf::mf7::Mf7Mt2) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LTHR", s.lthr)?;
+    // LTHR picks which of the two are present; either may be absent, and both
+    // are for an LTHR the reader does not know.
+    if let Some(c) = &s.coherent {
+        let first = PyDict::new(py);
+        first.set_item("T", c.t)?;
+        first.set_item("LT", c.lt)?;
+        first.set_item("S", tab1_class(&c.s))?;
+        let mut temps = vec![first];
+        for other in &c.others {
+            let e = PyDict::new(py);
+            e.set_item("T", other.t)?;
+            e.set_item("LI", other.li)?;
+            e.set_item("S", other.s.clone())?;
+            temps.push(e);
+        }
+        d.set_item("coherent", temps)?;
+    }
+    if let Some(i) = &s.incoherent {
+        let sub = PyDict::new(py);
+        sub.set_item("SB", i.sb)?;
+        sub.set_item("W", tab1_class(&i.w))?;
+        d.set_item("incoherent", sub)?;
+    }
+    Ok(d)
+}
+
+fn mf7_mt4_dict<'py>(py: Python<'py>, s: &endf::mf::mf7::Mf7Mt4) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LAT", s.lat)?;
+    d.set_item("LASYM", s.lasym)?;
+    d.set_item("LLN", s.lln)?;
+    d.set_item("NI", s.ni)?;
+    d.set_item("NS", s.ns)?;
+    d.set_item("B", s.b.clone())?;
+    // S(alpha, beta) is only written when B(1) is positive, and the three keys
+    // it brings are absent otherwise.
+    if let Some(beta_int) = &s.beta_int {
+        d.set_item("beta_int", tab2_class(beta_int))?;
+        d.set_item("NB", s.nb)?;
+        let mut laws = Vec::with_capacity(s.beta_data.len());
+        for law in &s.beta_data {
+            let first = PyDict::new(py);
+            first.set_item("T", law.t)?;
+            first.set_item("beta", law.beta)?;
+            first.set_item("LT", law.lt)?;
+            first.set_item("S", tab1_class(&law.s))?;
+            let mut temps = vec![first];
+            for other in &law.others {
+                let e = PyDict::new(py);
+                e.set_item("T", other.t)?;
+                e.set_item("beta", other.beta)?;
+                e.set_item("LT", other.lt)?;
+                e.set_item("S", other.s.clone())?;
+                temps.push(e);
+            }
+            laws.push(temps);
+        }
+        d.set_item("beta_data", laws)?;
+    }
+    d.set_item("Teff", s.teff.iter().map(tab1_class).collect::<Vec<_>>())?;
+    Ok(d)
+}
+
+fn mf7_mt451_dict<'py>(
+    py: Python<'py>,
+    s: &endf::mf::mf7::Mf7Mt451,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("NA", s.na)?;
+    let mut elements = Vec::with_capacity(s.elements.len());
+    for el in &s.elements {
+        let e = PyDict::new(py);
+        e.set_item("NAS", el.nas)?;
+        e.set_item("NI", el.ni)?;
+        e.set_item("ZAI", el.zai.clone())?;
+        e.set_item("LISI", el.lisi.clone())?;
+        e.set_item("AFI", el.afi.clone())?;
+        e.set_item("AWRI", el.awri.clone())?;
+        e.set_item("SFI", el.sfi.clone())?;
+        elements.push(e);
+    }
+    d.set_item("elements", elements)?;
+    Ok(d)
+}
+
+fn mf26_dict<'py>(py: Python<'py>, s: &endf::mf::atomic::Mf26) -> PyResult<Bound<'py, PyDict>> {
+    use endf::mf::atomic::ElectroAtomicDistribution as E;
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("NK", s.nk)?;
+    let mut products = Vec::with_capacity(s.products.len());
+    for p in &s.products {
+        let e = PyDict::new(py);
+        e.set_item("ZAP", p.zap)?;
+        e.set_item("AWI", p.awi)?;
+        e.set_item("LAW", p.law)?;
+        e.set_item("y", tab1_class(&p.yield_))?;
+        // An unrecognised law only warns on the Python side, leaving the
+        // product without a distribution; the key is left out to match.
+        match &p.distribution {
+            E::None => {}
+            E::ContinuumEnergyAngle(c) => {
+                e.set_item("distribution", continuum_energy_angle_dict(py, c)?)?
+            }
+            E::DiscreteTwoBody(t) => e.set_item("distribution", discrete_two_body_dict(py, t)?)?,
+            E::EnergyTransfer(t) => {
+                let sub = PyDict::new(py);
+                sub.set_item("ET", tab1_class(t))?;
+                e.set_item("distribution", sub)?
+            }
+        }
+        products.push(e);
+    }
+    d.set_item("products", products)?;
     Ok(d)
 }
 
@@ -964,17 +1256,23 @@ fn section_dict<'py>(py: Python<'py>, section: &Section) -> PyResult<Option<Boun
         Section::Mf1Mt451(s) => mf1_mt451_dict(py, s)?,
         Section::Mf1Mt452(s) => mf1_mt452_dict(py, s)?,
         Section::Mf1Mt455(s) => mf1_mt455_dict(py, s)?,
+        Section::Mf1Mt458(s) => mf1_mt458_dict(py, s)?,
         Section::Mf1Mt460(s) => mf1_mt460_dict(py, s)?,
         Section::Mf8(s) => mf8_dict(py, s)?,
         Section::Mf3(s) => mf3_dict(py, s)?,
         Section::Mf4(s) => mf4_dict(py, s)?,
         Section::Mf5(s) => mf5_dict(py, s)?,
+        Section::Mf6(s) => mf6_dict(py, s)?,
+        Section::Mf7Mt2(s) => mf7_mt2_dict(py, s)?,
+        Section::Mf7Mt4(s) => mf7_mt4_dict(py, s)?,
+        Section::Mf7Mt451(s) => mf7_mt451_dict(py, s)?,
         Section::Mf9Mf10(s) => mf9_mf10_dict(py, s)?,
         Section::Mf12(s) => mf12_dict(py, s)?,
         Section::Mf13(s) => mf13_dict(py, s)?,
         Section::Mf14(s) => mf14_dict(py, s)?,
         Section::Mf15(s) => mf15_dict(py, s)?,
         Section::Mf23(s) => mf23_dict(py, s)?,
+        Section::Mf26(s) => mf26_dict(py, s)?,
         Section::Mf27(s) => mf27_dict(py, s)?,
         Section::Mf28(s) => mf28_dict(py, s)?,
         Section::Mf33(s) => mf33_dict(py, s)?,

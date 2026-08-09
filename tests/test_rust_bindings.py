@@ -443,12 +443,12 @@ def test_section_data_matches(name):
 
 
 def test_section_data_leaves_out_what_it_cannot_build(am244, rust_am244):
-    # MF=1 MT=458 is parsed but has no dictionary form here, so it is absent
+    # MF=2 MT=151 is parsed but has no dictionary form here, so it is absent
     # rather than half-built, and asking for it says so.
-    assert (1, 458) in am244.section_data
-    assert (1, 458) not in rust_am244.section_data
+    assert (2, 151) in am244.section_data
+    assert (2, 151) not in rust_am244.section_data
     with pytest.raises(ValueError, match="no dictionary form"):
-        rust_am244[1, 458]
+        rust_am244[2, 151]
     # A section that does not exist at all is a different error.
     with pytest.raises(ValueError, match="no section"):
         rust_am244[3, 999]
@@ -457,20 +457,11 @@ def test_section_data_leaves_out_what_it_cannot_build(am244, rust_am244):
 #: The files whose sections have no dictionary form in the extension yet.
 #:
 #: MF=8 MT=457 is here by choice: decay data is reached through `Decay`, which
-#: is a better shape than the dictionary. The rest are simply not written yet.
-#: Pinned so the list cannot shrink or grow without saying so.
+#: is a better shape than the dictionary. MF=2 MT=151 is the one that is simply
+#: not written yet. Pinned so the list cannot shrink or grow without saying so.
 SECTIONS_WITHOUT_A_DICT = {
-    (1, 458),
     (2, 151),
-    (6, 102),
-    (6, 105),
-    (7, 2),
-    (7, 4),
     (8, 457),
-    (26, 525),
-    (26, 527),
-    (26, 528),
-    (26, 534),
 }
 
 
