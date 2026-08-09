@@ -26,6 +26,47 @@ just wants to read a file.
 `endf-py` exists so the Python package keeps its API while the parser moves
 underneath it.
 
+## The Python surface
+
+The concrete types come across as classes — `Material`, `Tabulated1D`,
+`CrossSection`, `Product`, `Reaction`, `IncidentNeutron`, `IncidentPhoton`,
+`Decay`, `Chain`, `AceTable` — with `float_endf`, `int_endf`, `get_materials`,
+`get_tables`, `reaction_name`, `reaction_mt` and `gnds_name` beside them.
+
+The sum types do not. An angle-energy distribution, an outgoing energy law and
+a univariate density come across as dicts tagged with a `kind` key:
+
+```python
+>>> rx = neutron[51]
+>>> rx.products[0].distribution[0]
+{'kind': 'uncorrelated',
+ 'angle': {'energy': [...], 'mu': [{'kind': 'legendre', 'coefficients': [...]}, ...]},
+ 'energy': {'kind': 'level-inelastic', 'threshold': 1.4e6, 'mass_ratio': 0.98}}
+```
+
+That is the shape a consumer wants anyway — `kind` is exactly the discriminant
+an Arrow union column needs — and it saves a wrapper class per variant for no
+gain in what can be expressed.
+
+**Not a drop-in for `endf.Material.section_data`.** That returns the Python
+reader's own dictionaries, keyed by ENDF field name, one shape per MF. What the
+extension exposes is the typed layer above it: the reactions, nuclides, decay
+data and chains that a consumer actually reads. Code that reaches into
+`material[3, 1]['sigma']` still wants the pure-Python reader.
+
+Paths ending in `.xz` are decompressed, matching `endf.fileutils.open_text`, so
+a path that works in one reader works in the other.
+
+Build it with:
+
+```sh
+maturin develop -m crates/endf-py/Cargo.toml
+```
+
+`tests/test_rust_bindings.py` then runs; it compares the extension against the
+pure-Python reader on the same fixtures rather than against values written down
+by hand, and skips itself when the module is not built.
+
 ## State
 
 | | |

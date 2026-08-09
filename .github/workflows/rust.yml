@@ -1,0 +1,105 @@
+name: Rust
+
+on:
+  workflow_dispatch:
+
+  pull_request:
+    branches:
+      - main
+      - local-develop
+  push:
+    branches:
+      - main
+      - local-develop
+
+jobs:
+  crate:
+    name: Crate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      # Debug and release both, because the parity tests compare floating
+      # point and the two profiles have caught different things.
+      - name: Test
+        run: |
+          cargo test
+          cargo test --release
+
+  goldens:
+    name: Goldens reproduce
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: python -m pip install .[test]
+
+      # The golden files are what holds the Rust reader to the Python one, so
+      # a change that quietly rewrites them would defeat the whole harness.
+      # Regenerating must leave the tree clean.
+      - name: Regenerate
+        run: |
+          python tools/dump_golden.py
+          python tools/dump_chain_golden.py
+
+      - name: Check for drift
+        run: |
+          if ! git diff --quiet; then
+            echo "Regenerating the goldens changed them:"
+            git diff --stat
+            exit 1
+          fi
+
+  bindings:
+    name: Python bindings
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          python -m pip install .[test] maturin
+
+      # An abi3 wheel, so one build serves every supported Python.
+      - name: Build the extension module
+        run: maturin build --release -m crates/endf-py/Cargo.toml -o dist
+
+      - name: Install the extension module
+        run: python -m pip install --no-index --find-links dist endf-py
+
+      # The bindings' tests compare the extension against the pure-Python
+      # reader on the same fixtures, so they only mean anything once it is
+      # installed. Fail rather than skip if the import did not take.
+      - name: Test
+        run: |
+          python -c "import _endf"
+          python -m pytest -ra tests/test_rust_bindings.py
