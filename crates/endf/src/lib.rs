@@ -31,6 +31,7 @@ pub mod incident_neutron;
 pub mod incident_photon;
 pub mod material;
 pub mod mf;
+pub mod njoy;
 pub mod product;
 pub mod radionuclide_production;
 pub mod reaction;

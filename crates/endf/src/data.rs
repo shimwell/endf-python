@@ -327,8 +327,46 @@ pub fn temperature_str(t: f64) -> String {
     format!("{}K", floor as i64 + i64::from(up))
 }
 
+/// Python's `str()` of a float.
+///
+/// Two places need it, and both would be wrong without it. The decay mode
+/// encoding packs a chain of modes as the digits of a decimal and decodes it
+/// by stripping the zeros and the point, which only works because `str()`
+/// always writes a fractional part — `10.0` keeps its trailing zero where a
+/// bare shortest-round-trip format gives `10` and loses it. An NJOY input deck
+/// interpolates temperatures the same way, so `900.0` has to stay `900.0`.
+pub fn python_float_str(value: f64) -> String {
+    let s = format!("{value}");
+    if s.contains('.')
+        || s.contains('e')
+        || s.contains('E')
+        || s.contains("inf")
+        || s.contains("NaN")
+    {
+        s
+    } else {
+        format!("{s}.0")
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn formats_floats_the_way_python_str_does() {
+        // Python always writes a fractional part; Rust's shortest form does
+        // not, and both the decay mode encoding and the NJOY deck depend on
+        // it being there.
+        assert_eq!(python_float_str(1.0), "1.0");
+        assert_eq!(python_float_str(10.0), "10.0");
+        assert_eq!(python_float_str(0.0), "0.0");
+        assert_eq!(python_float_str(900.0), "900.0");
+        assert_eq!(python_float_str(-0.0), "-0.0");
+        assert_eq!(python_float_str(1234567.0), "1234567.0");
+        // A value that already has one is left alone.
+        assert_eq!(python_float_str(293.6), "293.6");
+        assert_eq!(python_float_str(1.5), "1.5");
+    }
+
     use super::*;
 
     #[test]

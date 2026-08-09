@@ -97,32 +97,10 @@ pub const AVERAGE_ENERGY_NAMES: [&str; 17] = [
     "neutrino",
 ];
 
-/// Python's `str()` of a float, which is what the decay mode decoding reads.
-///
-/// The RTYP field packs a chain of decay modes as the digits of a decimal —
-/// 1.5 is a beta- followed by a neutron — and the Python reader decodes it by
-/// formatting the float and stripping the zeros and the point. That only works
-/// because `str()` always writes a fractional part, so `10.0` becomes `"10."`
-/// and keeps its trailing zero, where a bare shortest-round-trip format would
-/// give `"10"` and lose it.
-fn python_float_str(value: f64) -> String {
-    let s = format!("{value}");
-    if s.contains('.')
-        || s.contains('e')
-        || s.contains('E')
-        || s.contains("inf")
-        || s.contains("NaN")
-    {
-        s
-    } else {
-        format!("{s}.0")
-    }
-}
-
 /// The chain of decay modes an RTYP value names, e.g. `1.5` is a beta- decay
 /// followed by neutron emission.
 pub fn decay_modes(rtyp: f64) -> Vec<&'static str> {
-    python_float_str(rtyp)
+    crate::data::python_float_str(rtyp)
         .trim_matches('0')
         .chars()
         .filter(|c| *c != '.')

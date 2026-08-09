@@ -740,6 +740,51 @@ impl Nuclide {
         }
     }
 
+    /// Everything that does not add up, at the given tolerance.
+    ///
+    /// Decay branching ratios sum to one, the branches of each reaction sum to
+    /// one, and fission yields sum to two — two fragments per fission. An
+    /// empty result means the nuclide is consistent.
+    pub fn validate(&self, tolerance: f64) -> Vec<String> {
+        let mut problems = Vec::new();
+        let mut check = |property: &str, actual: f64, expected: f64| {
+            if !(expected - tolerance..=expected + tolerance).contains(&actual) {
+                problems.push(format!(
+                    "Nuclide {} has {property} that sum to {actual} instead of \
+                     {expected} +/- {tolerance:7.4e}",
+                    self.name
+                ));
+            }
+        };
+
+        if !self.decay_modes.is_empty() {
+            let total: f64 = self.decay_modes.iter().map(|m| m.branching_ratio).sum();
+            check("decay mode branch ratios", total, 1.0);
+        }
+
+        // Each reaction's branches are their own sum, so a nuclide with two
+        // reactions is not expected to sum to two.
+        let mut kinds: Vec<&str> = self.reactions.iter().map(|r| r.kind.as_str()).collect();
+        kinds.sort_unstable();
+        kinds.dedup();
+        for kind in kinds {
+            let total: f64 = self
+                .reactions
+                .iter()
+                .filter(|r| r.kind == kind)
+                .map(|r| r.branching_ratio)
+                .sum();
+            check(&format!("{kind} reaction branch ratios"), total, 1.0);
+        }
+
+        for (energy, yields) in &self.yield_data {
+            let total: f64 = yields.values().sum();
+            check(&format!("fission yields (E = {energy} eV)"), total, 2.0);
+        }
+
+        problems
+    }
+
     /// The incident energies the fission yields are given at, in eV.
     ///
     /// The keys are the energies formatted as the Python package writes them,
@@ -1019,6 +1064,16 @@ impl Chain {
             }
         }
         Ok(())
+    }
+
+    /// Everything in the chain that does not add up, nuclide by nuclide.
+    ///
+    /// An empty result means every branching ratio and yield is consistent.
+    pub fn validate(&self, tolerance: f64) -> Vec<String> {
+        self.nuclides
+            .iter()
+            .flat_map(|n| n.validate(tolerance))
+            .collect()
     }
 
     /// The chain reachable from a set of starting nuclides.
