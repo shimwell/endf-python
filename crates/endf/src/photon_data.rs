@@ -10,8 +10,10 @@
 //!
 //! Two files, both plain text so that this crate stays dependency-free:
 //!
-//! * `photon_aux.txt`, written by `tools/convert_photon_data.py` out of the
-//!   two HDF5 files the Python package ships. HDF5 would mean a C library.
+//! * `photon_aux.txt`, written by `tools/make_photon_aux.py`. Its Compton
+//!   profiles come from the Geant4 G4EMLOW data set, the primary distribution
+//!   of the Biggs tables; the density effect data is still vendored. The file
+//!   carries a header naming both.
 //! * `BREMX.DAT`, read as-is — it was already whitespace-separated text.
 //!
 //! They are not embedded in the crate. Together they are about 2.5 MB, which
@@ -106,7 +108,8 @@ fn parse_aux(text: &str) -> Result<PhotonData> {
 
     for line in text.lines() {
         let line = line.trim();
-        if line.is_empty() {
+        // The generator writes a provenance header; blank lines are harmless.
+        if line.is_empty() || line.starts_with('#') {
             continue;
         }
         if line == "COMPTON" || line == "DENSITY" {
