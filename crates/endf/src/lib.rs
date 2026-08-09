@@ -42,6 +42,11 @@ mod testdata;
 pub mod univariate;
 pub mod urr;
 
+// The ACE table is where a transport code starts, so its types are at the
+// root rather than behind `ace::`. `MetastableScheme` in particular is an
+// argument to `IncidentNeutron::from_ace`, and needing a module path to call a
+// re-exported method is the kind of friction that shows up immediately.
+pub use ace::{get_table, get_tables, tables_from_str, MetastableScheme, Table, TableType};
 pub use angle_energy::{
     AngleEnergy, CorrelatedAngleEnergy, KalbachMann, NBodyPhaseSpace, UncorrelatedAngleEnergy,
 };

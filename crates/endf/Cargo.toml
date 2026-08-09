@@ -6,6 +6,14 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+readme = "README.md"
+keywords = ["endf", "nuclear", "ace", "physics", "parser"]
+categories = ["science", "parser-implementations"]
+# The parity harness stays in the repository. Its golden dumps are 900 KB and
+# the evaluations they name live in `tests/` at the repository root, outside
+# this crate, so a published package would carry the dumps without the files
+# they refer to and the tests could not run from it anyway.
+exclude = ["tests/"]
 
 # Deliberately dependency-free. This crate is the format layer: consumers that
 # need Arrow, Python bindings or a simulation-ready projection build those on

@@ -38,6 +38,23 @@ jobs:
           cargo test
           cargo test --release
 
+  # The crate declares rust-version = "1.74" and consumers will believe it.
+  # Nothing else here checks it: the other jobs run stable, which happily
+  # accepts APIs stabilised years later. The library only — dev-dependencies
+  # are free to need a newer compiler, since they reach nobody downstream.
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@1.74
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build on the declared minimum
+        run: cargo build -p endf
+
   goldens:
     name: Goldens reproduce
     runs-on: ubuntu-latest
