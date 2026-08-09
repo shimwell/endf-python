@@ -10,6 +10,8 @@ golden naming all of them.
 
 from __future__ import annotations
 
+import difflib
+import io
 import lzma
 import sys
 from pathlib import Path
@@ -74,25 +76,57 @@ def dump_chain(d: Dump, path: str, chain) -> None:
             d.float(f"{rp}/branching_ratio", rx.branching_ratio)
 
 
-def main() -> None:
+def generate(out) -> None:
+    """Write the whole dump to an open text stream."""
     decay = [endf.Material(ROOT / "tests" / n) for n in DECAY]
     neutron = [endf.Material(ROOT / "tests" / n) for n in NEUTRON]
     chain = Chain.from_endf(
         decay, [], neutron, reactions=tuple(REACTIONS), progress=False
     )
 
+    out.write("# golden reference for a depletion chain, by the Python reader\n")
+    out.write("# regenerate with: python tools/dump_chain_golden.py\n")
+    out.write("KIND chain\n")
+    for name in DECAY:
+        out.write(f"DECAY tests/{name}\n")
+    for name in NEUTRON:
+        out.write(f"NEUTRON tests/{name}\n")
+    for name in REACTIONS:
+        out.write(f"REACTION {name}\n")
+    dump_chain(Dump(out), "chain", chain)
+
+
+def main() -> None:
     target = GOLDEN_DIR / "chain.txt.xz"
+
+    # As in dump_golden.py, the check compares text rather than compressed
+    # bytes, which are not portable between liblzma versions.
+    if "--check" in sys.argv[1:]:
+        fresh = io.StringIO()
+        generate(fresh)
+        with lzma.open(target, "rt") as fh:
+            stored = fh.read()
+        if fresh.getvalue() == stored:
+            print(f"{target.relative_to(ROOT)} matches", file=sys.stderr)
+            return
+        print(f"{target.relative_to(ROOT)}: drifted", file=sys.stderr)
+        diff = difflib.unified_diff(
+            stored.splitlines(),
+            fresh.getvalue().splitlines(),
+            fromfile="stored",
+            tofile="regenerated",
+            lineterm="",
+            n=1,
+        )
+        for i, line in enumerate(diff):
+            if i >= 40:
+                print("  ...", file=sys.stderr)
+                break
+            print(f"  {line}", file=sys.stderr)
+        sys.exit("the chain golden no longer matches the reader")
+
     with lzma.open(target, "wt", preset=9) as out:
-        out.write("# golden reference for a depletion chain, by the Python reader\n")
-        out.write("# regenerate with: python tools/dump_chain_golden.py\n")
-        out.write("KIND chain\n")
-        for name in DECAY:
-            out.write(f"DECAY tests/{name}\n")
-        for name in NEUTRON:
-            out.write(f"NEUTRON tests/{name}\n")
-        for name in REACTIONS:
-            out.write(f"REACTION {name}\n")
-        dump_chain(Dump(out), "chain", chain)
+        generate(out)
     print(f"{target.relative_to(ROOT)}", file=sys.stderr)
 
 

@@ -31,10 +31,22 @@ Regenerate every golden file::
 Add a fixture and regenerate only it::
 
     python tools/dump_golden.py tests/data/n-092_U_235.endf
+
+Check that the stored goldens still match what the reader produces, without
+writing anything::
+
+    python tools/dump_golden.py --check
+
+The check compares the *text*, not the compressed bytes: two xz encoders can
+write the same content differently, so a byte comparison fails on a machine
+whose liblzma differs from the one that wrote the file. A real difference is
+reported as a diff of the offending lines.
 """
 
 from __future__ import annotations
 
+import difflib
+import io
 import lzma
 import sys
 from pathlib import Path
@@ -1519,19 +1531,127 @@ def fixtures() -> list[Path]:
     return found
 
 
+def golden_for(path: Path) -> Path:
+    """Where a fixture's dump is stored."""
+    # `Path.stem` strips only one suffix, so a fixture named
+    # `n-095_Am_244.endf.xz` needs both taken off.
+    stem = Path(path.stem).stem if path.suffix == ".xz" else path.stem
+    return GOLDEN_DIR / f"{stem}.txt.xz"
+
+
+#: Relative tolerance for the paths below. Everything else is compared as text,
+#: which is exact: the dump writes the shortest round-tripping decimal.
+TOLERANCE = 1e-12
+
+
+def is_derived(path: str) -> bool:
+    """Whether a path holds arithmetic rather than a parsed value.
+
+    These are the same paths `crates/endf/tests/golden.rs` compares with a
+    tolerance, and for the same reason: they are computed, and the computation
+    moves in the last bit or two between NumPy releases. The forward-scattered
+    fraction integrates a Legendre series, whose Clenshaw recurrence NumPy
+    re-associated between 2.2 and 2.4, and the removal cross section folds that
+    into the total.
+    """
+    return (
+        path.endswith("/evaly")
+        or ("/reaction/" in path and "/yield/f/" in path)
+        or path.endswith("/decay_constant")
+        or path.endswith("/decay_energy")
+        or "/forward_fraction/" in path
+        or "/removal_xs/" in path
+    )
+
+
+def same_line(stored: str, fresh: str) -> bool:
+    """Whether two dump lines say the same thing."""
+    if stored == fresh:
+        return True
+    a, b = stored.split(), fresh.split()
+    # Only float values are ever compared loosely, and only on derived paths.
+    if len(a) != len(b) or a[:3] != b[:3] or a[0] != "V" or a[2] != "F":
+        return False
+    if not is_derived(a[1]):
+        return False
+    for x, y in zip(a[3:], b[3:]):
+        u, v = float(x), float(y)
+        if u == v:
+            continue
+        if u != u and v != v:  # both NaN
+            continue
+        if abs(u - v) > TOLERANCE * max(abs(u), abs(v)):
+            return False
+    return True
+
+
+def check(paths: list[Path]) -> int:
+    """Compare the stored dumps against freshly generated ones.
+
+    Text, not bytes: the file is xz-compressed and two encoders can write the
+    same content differently, so a byte comparison would fail on a machine
+    whose liblzma is not the one that wrote the file.
+    """
+    drifted = 0
+    for path in paths:
+        target = golden_for(path)
+        if not target.exists():
+            print(f"{target.relative_to(ROOT)}: missing", file=sys.stderr)
+            drifted += 1
+            continue
+
+        fresh = io.StringIO()
+        dump(path, fresh)
+        with lzma.open(target, "rt") as fh:
+            stored = fh.read()
+
+        stored_lines = stored.splitlines()
+        fresh_lines = fresh.getvalue().splitlines()
+        if len(stored_lines) == len(fresh_lines) and all(
+            same_line(a, b) for a, b in zip(stored_lines, fresh_lines)
+        ):
+            continue
+
+        drifted += 1
+        print(f"{target.relative_to(ROOT)}: drifted", file=sys.stderr)
+        diff = difflib.unified_diff(
+            stored_lines,
+            fresh_lines,
+            fromfile="stored",
+            tofile="regenerated",
+            lineterm="",
+            n=1,
+        )
+        # Enough context to identify the value, not the whole file.
+        for i, line in enumerate(diff):
+            if i >= 40:
+                print("  ...", file=sys.stderr)
+                break
+            print(f"  {line[:400]}", file=sys.stderr)
+    return drifted
+
+
 def main() -> None:
-    paths = [Path(a).resolve() for a in sys.argv[1:]] or fixtures()
+    args = sys.argv[1:]
+    checking = "--check" in args
+    args = [a for a in args if a != "--check"]
+
+    paths = [Path(a).resolve() for a in args] or fixtures()
     if not paths:
         sys.exit("no ENDF fixtures found; pass one explicitly")
 
+    if checking:
+        drifted = check(paths)
+        if drifted:
+            sys.exit(f"{drifted} golden file(s) no longer match the reader")
+        print(f"{len(paths)} golden files match", file=sys.stderr)
+        return
+
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
     for path in paths:
-        # `Path.stem` strips only one suffix, so a fixture named
-        # `n-095_Am_244.endf.xz` needs both taken off.
-        stem = Path(path.stem).stem if path.suffix == ".xz" else path.stem
+        target = golden_for(path)
         # The dumps are as repetitive as the evaluations they come from and
         # compress about seven to one, so they are stored the same way.
-        target = GOLDEN_DIR / f"{stem}.txt.xz"
         with lzma.open(target, "wt", preset=9) as out:
             dump(path, out)
         print(

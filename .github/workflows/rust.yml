@@ -53,19 +53,15 @@ jobs:
 
       # The golden files are what holds the Rust reader to the Python one, so
       # a change that quietly rewrites them would defeat the whole harness.
-      # Regenerating must leave the tree clean.
-      - name: Regenerate
-        run: |
-          python tools/dump_golden.py
-          python tools/dump_chain_golden.py
-
+      #
+      # `--check` compares the dump text rather than the compressed bytes and
+      # prints the offending lines. Comparing bytes would fail on any machine
+      # whose liblzma is not the one that wrote the file, which says nothing
+      # about the reader.
       - name: Check for drift
         run: |
-          if ! git diff --quiet; then
-            echo "Regenerating the goldens changed them:"
-            git diff --stat
-            exit 1
-          fi
+          python tools/dump_golden.py --check
+          python tools/dump_chain_golden.py --check
 
   bindings:
     name: Python bindings

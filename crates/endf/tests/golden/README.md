@@ -68,8 +68,19 @@ Nothing in the Rust test needs changing — it discovers golden files and follow
 
 Values are written as the shortest round-tripping decimal and both readers parse
 decimals with correct rounding, so parsed values are compared bit-for-bit. Only
-the interpolation samples use a tolerance, because logs and exps need not round
-identically in the two languages.
+computed values use a tolerance, and `is_interpolated` in `golden.rs` lists
+exactly which: the interpolation samples, because logs and exps need not round
+identically in the two languages; the MF=10 yields, which divide two
+interpolated cross sections; the propagated uncertainties, where `uncertainties`
+accumulates a variance and takes its square root; and the forward-scattered
+fraction with the removal cross section that folds it in, because NumPy
+re-associated the Clenshaw recurrence between 2.2 and 2.4 and the two give
+different last bits. Nothing that comes off the file is compared loosely.
+
+`python tools/dump_golden.py --check` compares the stored dumps against freshly
+generated ones under the same rules, which is what CI runs. It compares the dump
+*text* rather than the compressed bytes — two xz encoders can write the same
+content differently, and that says nothing about the reader.
 
 The `SECTION` lines matter more than they look: they hold the section splitter
 to the Python reader across files that have no Rust parser yet, so a new
