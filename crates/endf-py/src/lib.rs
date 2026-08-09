@@ -24,7 +24,7 @@ use endf::univariate::Univariate;
 use endf::Section;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyTuple};
 
 fn to_py_err(e: endf::Error) -> PyErr {
     PyValueError::new_err(e.to_string())
@@ -830,6 +830,390 @@ fn mf23_dict<'py>(py: Python<'py>, s: &endf::mf::atomic::Mf23) -> PyResult<Bound
     Ok(d)
 }
 
+/// LRU=2, whose three cases store different keys.
+///
+/// Which case applies is decided by LFW and LRF rather than by what is in the
+/// struct, so an empty list keeps the shape its case calls for.
+fn unresolved_dict<'py>(
+    py: Python<'py>,
+    u: &endf::mf::mf2::Unresolved,
+    lfw: i64,
+    lrf: i64,
+) -> PyResult<Bound<'py, PyDict>> {
+    use endf::mf::mf2::UnresolvedParameters as P;
+    let d = PyDict::new(py);
+    if let Some(ape) = &u.ape {
+        d.set_item("APE", tab1_class(ape))?;
+    }
+    d.set_item("SPI", u.spi)?;
+    d.set_item("AP", u.ap)?;
+    d.set_item("LSSF", u.lssf)?;
+    // Case B reads NE and the energy grid the fission widths sit on; the other
+    // two cases have neither key.
+    if let Some(ne) = u.ne {
+        d.set_item("NE", ne)?;
+    }
+    d.set_item("NLS", u.nls)?;
+    if u.ne.is_some() {
+        d.set_item("ES", u.es.clone())?;
+    }
+    let case_a = lfw == 0 && lrf == 1;
+    let mut ranges = Vec::with_capacity(u.ranges.len());
+    for r in &u.ranges {
+        let e = PyDict::new(py);
+        e.set_item("AWRI", r.awri)?;
+        e.set_item("L", r.l)?;
+        e.set_item("NJS", r.njs)?;
+        if case_a {
+            e.set_item("D", r.d.clone())?;
+            e.set_item("AJ", r.aj.clone())?;
+            e.set_item("AMUN", r.amun.clone())?;
+            e.set_item("GNO", r.gno.clone())?;
+            e.set_item("GG", r.gg.clone())?;
+        } else {
+            let mut params = Vec::with_capacity(r.parameters.len());
+            for p in &r.parameters {
+                let q = PyDict::new(py);
+                match p {
+                    P::CaseB {
+                        muf,
+                        d,
+                        aj,
+                        amun,
+                        gn0,
+                        gg,
+                        gf,
+                    } => {
+                        q.set_item("MUF", *muf)?;
+                        q.set_item("D", *d)?;
+                        q.set_item("AJ", *aj)?;
+                        q.set_item("AMUN", *amun)?;
+                        q.set_item("GN0", *gn0)?;
+                        q.set_item("GG", *gg)?;
+                        q.set_item("GF", gf.clone())?;
+                    }
+                    P::CaseC {
+                        aj,
+                        interpolation,
+                        ne,
+                        amux,
+                        amun,
+                        amuf,
+                        e: energy,
+                        d: spacing,
+                        gx,
+                        gn0,
+                        gg,
+                        gf,
+                    } => {
+                        q.set_item("AJ", *aj)?;
+                        q.set_item("INT", *interpolation)?;
+                        q.set_item("NE", *ne)?;
+                        q.set_item("AMUX", *amux)?;
+                        q.set_item("AMUN", *amun)?;
+                        q.set_item("AMUF", *amuf)?;
+                        q.set_item("E", energy.clone())?;
+                        q.set_item("D", spacing.clone())?;
+                        q.set_item("GX", gx.clone())?;
+                        q.set_item("GN0", gn0.clone())?;
+                        q.set_item("GG", gg.clone())?;
+                        q.set_item("GF", gf.clone())?;
+                    }
+                }
+                params.push(q);
+            }
+            e.set_item("parameters", params)?;
+        }
+        ranges.push(e);
+    }
+    d.set_item("ranges", ranges)?;
+    Ok(d)
+}
+
+/// LRF=7: the spin groups, with their optional background and phase-shift
+/// extensions.
+fn r_matrix_limited_dict<'py>(
+    py: Python<'py>,
+    r: &endf::mf::mf2::RMatrixLimited,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("IFG", r.ifg)?;
+    d.set_item("KRM", r.krm)?;
+    d.set_item("NJS", r.njs)?;
+    d.set_item("KRL", r.krl)?;
+    d.set_item("NPP", r.npp)?;
+    let pp = PyDict::new(py);
+    let pairs = &r.particle_pairs;
+    pp.set_item("MA", pairs.ma.clone())?;
+    pp.set_item("MB", pairs.mb.clone())?;
+    pp.set_item("ZA", pairs.za.clone())?;
+    pp.set_item("ZB", pairs.zb.clone())?;
+    pp.set_item("IA", pairs.ia.clone())?;
+    pp.set_item("IB", pairs.ib.clone())?;
+    pp.set_item("Q", pairs.q.clone())?;
+    pp.set_item("PNT", pairs.pnt.clone())?;
+    pp.set_item("SHF", pairs.shf.clone())?;
+    pp.set_item("MT", pairs.mt.clone())?;
+    pp.set_item("PA", pairs.pa.clone())?;
+    pp.set_item("PB", pairs.pb.clone())?;
+    d.set_item("particle_pairs", pp)?;
+
+    let mut groups = Vec::with_capacity(r.spin_groups.len());
+    for g in &r.spin_groups {
+        let e = PyDict::new(py);
+        e.set_item("AJ", g.aj)?;
+        e.set_item("PJ", g.pj)?;
+        e.set_item("KBK", g.kbk)?;
+        e.set_item("KPS", g.kps)?;
+        e.set_item("NCH", g.nch)?;
+        let ch = PyDict::new(py);
+        ch.set_item("PPI", g.channels.ppi.clone())?;
+        ch.set_item("L", g.channels.l.clone())?;
+        ch.set_item("SCH", g.channels.sch.clone())?;
+        ch.set_item("BND", g.channels.bnd.clone())?;
+        ch.set_item("APE", g.channels.ape.clone())?;
+        ch.set_item("APT", g.channels.apt.clone())?;
+        e.set_item("channels", ch)?;
+        e.set_item("NRS", g.nrs)?;
+        e.set_item("NX", g.nx)?;
+        e.set_item("ER", g.er.clone())?;
+        // Channel-major already, which is the transpose Python returns.
+        e.set_item("GAM", g.gam.clone())?;
+        // Each extension writes its keys only when the flag that guards it is
+        // set, so they are absent rather than None when it is not.
+        for (key, value) in [("LCH", g.lch), ("LBK", g.lbk), ("LPS", g.lps)] {
+            if let Some(v) = value {
+                e.set_item(key, v)?;
+            }
+        }
+        for (key, value) in [
+            ("RBR", &g.rbr),
+            ("RBI", &g.rbi),
+            ("PSR", &g.psr),
+            ("PSI", &g.psi),
+        ] {
+            if let Some(t) = value {
+                e.set_item(key, tab1_class(t))?;
+            }
+        }
+        for (key, value) in [("ED", g.ed), ("EU", g.eu)] {
+            if let Some(v) = value {
+                e.set_item(key, v)?;
+            }
+        }
+        groups.push(e);
+    }
+    d.set_item("spin_groups", groups)?;
+    Ok(d)
+}
+
+fn mf2_dict<'py>(py: Python<'py>, s: &endf::mf::mf2::Mf2) -> PyResult<Bound<'py, PyDict>> {
+    use endf::mf::mf2::ResonanceParameters as R;
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("NIS", s.nis)?;
+    let mut isotopes = Vec::with_capacity(s.isotopes.len());
+    for iso in &s.isotopes {
+        let i = PyDict::new(py);
+        i.set_item("ZAI", iso.zai)?;
+        i.set_item("ABN", iso.abn)?;
+        i.set_item("LFW", iso.lfw)?;
+        i.set_item("NER", iso.ner)?;
+        let mut ranges = Vec::with_capacity(iso.ranges.len());
+        for r in &iso.ranges {
+            // The formalism's keys go into the range dictionary itself, as
+            // `rrange.update(...)` puts them there upstream.
+            let e = PyDict::new(py);
+            e.set_item("EL", r.el)?;
+            e.set_item("EH", r.eh)?;
+            e.set_item("LRU", r.lru)?;
+            e.set_item("LRF", r.lrf)?;
+            e.set_item("NRO", r.nro)?;
+            e.set_item("NAPS", r.naps)?;
+            match &r.parameters {
+                R::ScatteringRadius { spi, ap, nls } => {
+                    e.set_item("SPI", *spi)?;
+                    e.set_item("AP", *ap)?;
+                    e.set_item("NLS", *nls)?;
+                }
+                R::BreitWigner(b) => {
+                    if let Some(ape) = &b.ape {
+                        e.set_item("APE", tab1_class(ape))?;
+                    }
+                    e.set_item("SPI", b.spi)?;
+                    e.set_item("AP", b.ap)?;
+                    e.set_item("NLS", b.nls)?;
+                    let mut sections = Vec::with_capacity(b.sections.len());
+                    for sec in &b.sections {
+                        let q = PyDict::new(py);
+                        q.set_item("AWRI", sec.awri)?;
+                        q.set_item("QX", sec.qx)?;
+                        q.set_item("L", sec.l)?;
+                        q.set_item("LRX", sec.lrx)?;
+                        q.set_item("NRS", sec.nrs)?;
+                        q.set_item("ER", sec.er.clone())?;
+                        q.set_item("AJ", sec.aj.clone())?;
+                        q.set_item("GT", sec.gt.clone())?;
+                        q.set_item("GN", sec.gn.clone())?;
+                        q.set_item("GG", sec.gg.clone())?;
+                        q.set_item("GF", sec.gf.clone())?;
+                        sections.push(q);
+                    }
+                    e.set_item("sections", sections)?;
+                }
+                R::ReichMoore(m) => {
+                    if let Some(ape) = &m.ape {
+                        e.set_item("APE", tab1_class(ape))?;
+                    }
+                    e.set_item("SPI", m.spi)?;
+                    e.set_item("AP", m.ap)?;
+                    e.set_item("LAD", m.lad)?;
+                    e.set_item("NLS", m.nls)?;
+                    e.set_item("NLSC", m.nlsc)?;
+                    let mut sections = Vec::with_capacity(m.sections.len());
+                    for sec in &m.sections {
+                        let q = PyDict::new(py);
+                        q.set_item("AWRI", sec.awri)?;
+                        q.set_item("APL", sec.apl)?;
+                        q.set_item("L", sec.l)?;
+                        q.set_item("NRS", sec.nrs)?;
+                        q.set_item("ER", sec.er.clone())?;
+                        q.set_item("AJ", sec.aj.clone())?;
+                        q.set_item("GN", sec.gn.clone())?;
+                        q.set_item("GG", sec.gg.clone())?;
+                        q.set_item("GFA", sec.gfa.clone())?;
+                        q.set_item("GFB", sec.gfb.clone())?;
+                        sections.push(q);
+                    }
+                    e.set_item("sections", sections)?;
+                }
+                R::RMatrixLimited(m) => {
+                    e.update(r_matrix_limited_dict(py, m)?.as_mapping())?;
+                }
+                R::Unresolved(u) => {
+                    e.update(unresolved_dict(py, u, iso.lfw, r.lrf)?.as_mapping())?;
+                }
+                // An unresolved range with LRF=1 is dispatched past without
+                // being read upstream, so the range keeps only its own keys.
+                // See issue #15.
+                R::Absent => {}
+            }
+            ranges.push(e);
+        }
+        i.set_item("ranges", ranges)?;
+        isotopes.push(i);
+    }
+    d.set_item("isotopes", isotopes)?;
+    Ok(d)
+}
+
+fn mf8_mt457_dict<'py>(
+    py: Python<'py>,
+    s: &endf::mf::mf8::Mf8Mt457,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("ZA", s.za)?;
+    d.set_item("AWR", s.awr)?;
+    d.set_item("LIS", s.lis)?;
+    d.set_item("LISO", s.liso)?;
+    d.set_item("NST", s.nst)?;
+    d.set_item("NSP", s.nsp)?;
+    d.set_item("SPI", s.spi)?;
+    d.set_item("PAR", s.par)?;
+
+    // A stable nuclide stops after the spin and parity — no half-life, no
+    // decay modes, no spectra.
+    let half_life = match s.half_life {
+        Some(t) => t,
+        None => return Ok(d),
+    };
+    d.set_item("T1/2", half_life)?;
+    d.set_item("NC", s.nc)?;
+    d.set_item("Ex", s.ex.clone())?;
+    d.set_item("NDK", s.ndk)?;
+    let mut modes = Vec::with_capacity(s.modes.len());
+    for m in &s.modes {
+        let e = PyDict::new(py);
+        e.set_item("RTYP", m.rtyp)?;
+        e.set_item("RFS", m.rfs)?;
+        e.set_item("Q", m.q)?;
+        e.set_item("BR", m.br)?;
+        modes.push(e);
+    }
+    d.set_item("modes", modes)?;
+
+    let mut spectra = Vec::with_capacity(s.spectra.len());
+    for sp in &s.spectra {
+        let e = PyDict::new(py);
+        e.set_item("STYP", sp.styp)?;
+        e.set_item("LCON", sp.lcon)?;
+        e.set_item("LCOV", sp.lcov)?;
+        e.set_item("NER", sp.ner)?;
+        e.set_item("FD", sp.fd)?;
+        e.set_item("ER_AV", sp.er_av)?;
+        e.set_item("FC", sp.fc)?;
+        if sp.lcon != 1 {
+            let mut discrete = Vec::with_capacity(sp.discrete.len());
+            for r in &sp.discrete {
+                let q = PyDict::new(py);
+                q.set_item("ER", r.er)?;
+                q.set_item("RTYP", r.rtyp)?;
+                q.set_item("TYPE", r.type_)?;
+                q.set_item("RI", r.ri)?;
+                // STYP decides which keys exist; a record too short to hold
+                // the pair still gets its key, with an empty tuple, because
+                // Python slices rather than indexes. See issue #19.
+                if sp.styp == 0.0 || sp.styp == 2.0 {
+                    q.set_item("RIS", opt_pair_py(py, r.ris))?;
+                }
+                if sp.styp == 0.0 {
+                    q.set_item("RICC", opt_pair_py(py, r.ricc))?;
+                    q.set_item("RICK", opt_pair_py(py, r.rick))?;
+                    q.set_item("RICL", opt_pair_py(py, r.ricl))?;
+                }
+                discrete.push(q);
+            }
+            e.set_item("discrete", discrete)?;
+        }
+        if let Some(c) = &sp.continuous {
+            let q = PyDict::new(py);
+            q.set_item("RTYP", c.rtyp)?;
+            q.set_item("RP", tab1_class(&c.rp))?;
+            e.set_item("continuous", q)?;
+        }
+        if let Some(c) = &sp.continuous_covariance {
+            let q = PyDict::new(py);
+            q.set_item("LB", c.lb)?;
+            q.set_item("Ek", c.ek.clone())?;
+            q.set_item("Fk", c.fk.clone())?;
+            e.set_item("continuous_covariance", q)?;
+        }
+        if let Some(c) = &sp.discrete_covariance {
+            let q = PyDict::new(py);
+            q.set_item("LS", c.ls)?;
+            q.set_item("LB", c.lb)?;
+            q.set_item("NE", c.ne)?;
+            q.set_item("NERP", c.nerp)?;
+            q.set_item("Ek", c.ek.clone())?;
+            q.set_item("Fkk", c.fkk.clone())?;
+            e.set_item("discrete_covariance", q)?;
+        }
+        spectra.push(e);
+    }
+    d.set_item("spectra", spectra)?;
+    Ok(d)
+}
+
+/// A `(value, uncertainty)` pair, or the empty tuple when the record was too
+/// short to hold one.
+fn opt_pair_py(py: Python<'_>, pair: Option<(f64, f64)>) -> Bound<'_, PyTuple> {
+    match pair {
+        Some((v, u)) => PyTuple::new(py, [v, u]).expect("a two-element tuple"),
+        None => PyTuple::empty(py),
+    }
+}
+
 fn mf1_mt458_dict<'py>(
     py: Python<'py>,
     s: &endf::mf::mf1::Mf1Mt458,
@@ -1258,7 +1642,9 @@ fn section_dict<'py>(py: Python<'py>, section: &Section) -> PyResult<Option<Boun
         Section::Mf1Mt455(s) => mf1_mt455_dict(py, s)?,
         Section::Mf1Mt458(s) => mf1_mt458_dict(py, s)?,
         Section::Mf1Mt460(s) => mf1_mt460_dict(py, s)?,
+        Section::Mf2(s) => mf2_dict(py, s)?,
         Section::Mf8(s) => mf8_dict(py, s)?,
+        Section::Mf8Mt457(s) => mf8_mt457_dict(py, s)?,
         Section::Mf3(s) => mf3_dict(py, s)?,
         Section::Mf4(s) => mf4_dict(py, s)?,
         Section::Mf5(s) => mf5_dict(py, s)?,

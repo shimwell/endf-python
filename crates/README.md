@@ -50,17 +50,22 @@ gain in what can be expressed.
 
 `Material.section_data` and `material[3, 1]` are there too, giving back the
 same dictionaries the Python reader does, keyed by the same ENDF field names.
-96% of the sections in the fixtures have one — MF 1, 3, 4, 5, 6, 7, 8, 9, 10,
-12, 13, 14, 15, 23, 26, 27, 28, 33, 34 and 40. A section with no dictionary form
-is left out of `section_data` rather than half-built, and asking for it by key
-says so.
+Every one of the 400 sections across the fixtures has one — MF 1, 2, 3, 4, 5, 6,
+7, 8, 9, 10, 12, 13, 14, 15, 23, 26, 27, 28, 33, 34 and 40 — so code written
+against `Material.section_data` runs unchanged against either reader. That is
+held by `tests/test_rust_bindings.py`, which compares the two dictionaries key
+by key and pins the set of sections without one, currently empty, so a
+projection that stops being built fails rather than silently disappearing.
 
-What is left: MF 2 has no dictionary yet, and MF=8 MT=457 does not have one on
-purpose — decay data is reached through `Decay`, which is a better shape. The
-resonance parameters are reachable meanwhile through `Material.mf2()` and the
-typed `Mf2` accessors. The set is pinned in
-`tests/test_rust_bindings.py::SECTIONS_WITHOUT_A_DICT` and asserted, so it
-cannot drift in either direction.
+The upstream quirks come with them, because matching means matching: MT=458
+reports `ZA` as a float since it is read from a CONT record, MF=7 MT=4 stores
+the outer `LT` on each additional temperature rather than the `LI` it read, an
+unresolved range with LRF=1 is dispatched past unread, and a decay record too
+short for its internal conversion coefficients yields an empty tuple rather
+than a zero. Each is commented at its site with the issue that tracks it.
+
+A section with no dictionary form is left out of `section_data` rather than
+half-built, and asking for it by key says so.
 
 Paths ending in `.xz` are decompressed, matching `endf.fileutils.open_text`, so
 a path that works in one reader works in the other.

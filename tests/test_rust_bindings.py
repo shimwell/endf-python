@@ -442,27 +442,17 @@ def test_section_data_matches(name):
         compare_values(material[key], reference.section_data[key], f"{name} {key}")
 
 
-def test_section_data_leaves_out_what_it_cannot_build(am244, rust_am244):
-    # MF=2 MT=151 is parsed but has no dictionary form here, so it is absent
-    # rather than half-built, and asking for it says so.
-    assert (2, 151) in am244.section_data
-    assert (2, 151) not in rust_am244.section_data
-    with pytest.raises(ValueError, match="no dictionary form"):
-        rust_am244[2, 151]
-    # A section that does not exist at all is a different error.
+def test_asking_for_a_section_that_is_not_there(rust_am244):
     with pytest.raises(ValueError, match="no section"):
         rust_am244[3, 999]
 
 
-#: The files whose sections have no dictionary form in the extension yet.
+#: The files whose sections have no dictionary form in the extension.
 #:
-#: MF=8 MT=457 is here by choice: decay data is reached through `Decay`, which
-#: is a better shape than the dictionary. MF=2 MT=151 is the one that is simply
-#: not written yet. Pinned so the list cannot shrink or grow without saying so.
-SECTIONS_WITHOUT_A_DICT = {
-    (2, 151),
-    (8, 457),
-}
+#: Empty: every section the fixtures contain has one. Kept, and asserted
+#: against, so a projection that stops being built shows up as a failure here
+#: rather than as a section quietly missing from `section_data`.
+SECTIONS_WITHOUT_A_DICT = set()
 
 
 def test_the_uncovered_section_list_is_accurate():
