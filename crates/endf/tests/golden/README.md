@@ -34,6 +34,18 @@ the Rust side reads them with `lzma-rs`, a pure-Rust **dev-dependency**, so the
 Nothing else changes: `python tools/dump_golden.py` writes `.txt.xz` and the
 dumps are still byte-reproducible.
 
+## The chain golden
+
+`chain.txt.xz` is the odd one out: a depletion chain is the join of three
+sub-libraries, so its golden names all of them with `DECAY`, `NEUTRON` and
+`REACTION` lines instead of a single `SOURCE`. It is written by
+`tools/dump_chain_golden.py` rather than by the main dumper, and the Rust
+harness recognises it by `KIND chain`.
+
+The ten decay evaluations behind it were chosen to close every path the chain
+follows — except Cs137's, whose barium daughters are deliberately absent so
+that the stand-in walk of `replace_missing` is exercised.
+
 ## Adding an evaluation
 
 1. Compress the file and drop it in `tests/`:
@@ -110,6 +122,7 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 | `e-001_H_000` | MF23, MF26 in all three laws |
 | `tsl-s-CH4` | MF7 MT=2 and MT=4 |
 | `dec-049_In_116m1` | MF8 MT=457 decay data: four spectra, beta- only |
+| eight more `dec-*` | The decay evaluations that close the chain fixture |
 | `dec-049_In_116m2` | MF8 MT=457 decay data: an isomeric transition down to m1 |
 | `Li6.ace` | An ACE Type 1 table; AND in all three shapes, DLW laws 3, 33 and 44, 15 reactions with photon production |
 | `synthetic-urr.ace` | The unresolved resonance block, which no small real table has |

@@ -21,6 +21,7 @@
 
 pub mod ace;
 pub mod angle_energy;
+pub mod chain;
 pub mod data;
 pub mod decay;
 pub mod error;
@@ -43,6 +44,7 @@ pub mod urr;
 pub use angle_energy::{
     AngleEnergy, CorrelatedAngleEnergy, KalbachMann, NBodyPhaseSpace, UncorrelatedAngleEnergy,
 };
+pub use chain::{Chain, Nuclide, ReactionInfo, REACTIONS};
 pub use data::{gnds_name, zam, EV_PER_MEV, K_BOLTZMANN};
 pub use decay::{Decay, DecayMode, FissionProductYields};
 pub use error::{Error, Result};

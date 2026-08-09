@@ -901,6 +901,36 @@ fn dump_incident_neutron_ace(d: &mut Dump, path: &str, t: &ace::Table) {
     }
 }
 
+/// Mirrors `dump_chain` in `tools/dump_chain_golden.py`.
+fn dump_chain(d: &mut Dump, path: &str, chain: &endf::Chain) {
+    d.int(format!("{path}/n"), chain.nuclides.len() as i64);
+    for (i, nuclide) in chain.nuclides.iter().enumerate() {
+        let np = format!("{path}/{i}");
+        d.text(format!("{np}/name"), &nuclide.name);
+        if let Some(half_life) = nuclide.half_life {
+            d.float(format!("{np}/half_life"), half_life);
+        }
+        d.float(format!("{np}/decay_energy"), nuclide.decay_energy);
+        for (j, mode) in nuclide.decay_modes.iter().enumerate() {
+            let mp = format!("{np}/decay/{j}");
+            d.text(format!("{mp}/type"), &mode.kind);
+            if let Some(target) = &mode.target {
+                d.text(format!("{mp}/target"), target);
+            }
+            d.float(format!("{mp}/branching_ratio"), mode.branching_ratio);
+        }
+        for (j, rx) in nuclide.reactions.iter().enumerate() {
+            let rp = format!("{np}/reaction/{j}");
+            d.text(format!("{rp}/type"), &rx.kind);
+            if let Some(target) = &rx.target {
+                d.text(format!("{rp}/target"), target);
+            }
+            d.float(format!("{rp}/Q"), rx.q_value);
+            d.float(format!("{rp}/branching_ratio"), rx.branching_ratio);
+        }
+    }
+}
+
 /// Mirrors `dump_incident_photon` in `tools/dump_golden.py`.
 fn dump_incident_photon(d: &mut Dump, path: &str, material: &Material) {
     let has_photoatomic = material.section_data.keys().any(|&(mf, _)| mf == 23);
@@ -2002,12 +2032,19 @@ struct Golden {
     /// material index -> MAT number.
     mats: BTreeMap<usize, i32>,
     values: BTreeMap<String, Value>,
+    /// `KIND chain` only: the evaluations the chain is built from.
+    decay: Vec<String>,
+    neutron: Vec<String>,
+    chain_reactions: Vec<String>,
 }
 
 fn parse_golden(text: &str, name: &str) -> Golden {
     let mut g = Golden {
         kind: String::new(),
         n_tables: 0,
+        decay: Vec::new(),
+        neutron: Vec::new(),
+        chain_reactions: Vec::new(),
         source: String::new(),
         n_materials: 0,
         sections: BTreeMap::new(),
@@ -2025,6 +2062,9 @@ fn parse_golden(text: &str, name: &str) -> Golden {
         let f: Vec<&str> = parts.collect();
         match key {
             "KIND" => g.kind = f[0].to_string(),
+            "DECAY" => g.decay.push(f[0].to_string()),
+            "NEUTRON" => g.neutron.push(f[0].to_string()),
+            "REACTION" => g.chain_reactions.push(f[0].to_string()),
             "TABLES" => g.n_tables = f[0].parse().unwrap(),
             "SOURCE" => g.source = f[0].to_string(),
             "MATERIALS" => g.n_materials = f[0].parse().unwrap(),
@@ -2158,6 +2198,22 @@ fn check(golden_path: &Path) -> usize {
     let g = parse_golden(&text, &name);
 
     let source_path = repo_root().join(&g.source);
+
+    if g.kind == "chain" {
+        let read = |paths: &[String]| -> Vec<Material> {
+            paths
+                .iter()
+                .map(|p| Material::from_str(&read_text(&repo_root().join(p))).unwrap())
+                .collect()
+        };
+        let reactions: Vec<&str> = g.chain_reactions.iter().map(String::as_str).collect();
+        let chain =
+            endf::Chain::from_endf(&read(&g.decay), &[], &read(&g.neutron), &reactions).unwrap();
+        let mut d = Dump::default();
+        dump_chain(&mut d, "chain", &chain);
+        compare(&name, &d.map, &g.values);
+        return g.values.len();
+    }
 
     if g.kind == "ace" {
         let tables = ace::tables_from_str(&read_text(&source_path), None)
