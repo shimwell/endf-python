@@ -8,12 +8,12 @@
 //! [`crate::IncidentPhoton`] by atomic number after reading the evaluation,
 //! and so does this.
 //!
-//! Two files, both plain text so that this crate stays dependency-free:
+//! Three files, all plain text so that this crate stays dependency-free:
 //!
-//! * `photon_aux.txt`, written by `tools/make_photon_aux.py`. Its Compton
-//!   profiles come from the Geant4 G4EMLOW data set, the primary distribution
-//!   of the Biggs tables; the density effect data is still vendored. The file
-//!   carries a header naming both.
+//! * `compton_profiles_biggs1975.txt` and `density_effect_sternheimer1982.txt`,
+//!   written by `tools/make_photon_aux.py`. The profiles come from the Geant4
+//!   G4EMLOW data set, the primary distribution of the Biggs tables; the
+//!   density effect is still vendored. Each carries a header naming its source.
 //! * `BREMX.DAT`, read as-is — it was already whitespace-separated text.
 //!
 //! They are not embedded in the crate. Together they are about 2.5 MB, which
@@ -73,13 +73,22 @@ pub struct PhotonData {
 }
 
 impl PhotonData {
-    /// Read both files.
+    /// Read the three tabulations.
     ///
-    /// `aux` is `photon_aux.txt` and `bremx` is `BREMX.DAT`, both of which the
-    /// Python package ships in `endf/datafiles`.
-    pub fn from_files(aux: impl AsRef<Path>, bremx: impl AsRef<Path>) -> Result<PhotonData> {
-        let mut data = parse_aux(&std::fs::read_to_string(aux)?)?;
-        data.add_bremsstrahlung(&std::fs::read_to_string(bremx)?)?;
+    /// One argument per source rather than one per format: the Compton profiles
+    /// and the density effect come from unrelated measurements and only ever
+    /// shared a file because they shared an HDF5 container. The crate takes
+    /// paths and never looks anything up by name, so a consumer is free to call
+    /// the files whatever suits it.
+    pub fn from_files(
+        compton_profiles: impl AsRef<Path>,
+        density_effect: impl AsRef<Path>,
+        bremsstrahlung: impl AsRef<Path>,
+    ) -> Result<PhotonData> {
+        let mut data = PhotonData::default();
+        parse_aux_into(&mut data, &std::fs::read_to_string(compton_profiles)?)?;
+        parse_aux_into(&mut data, &std::fs::read_to_string(density_effect)?)?;
+        data.add_bremsstrahlung(&std::fs::read_to_string(bremsstrahlung)?)?;
         Ok(data)
     }
 }
@@ -102,8 +111,11 @@ fn take_floats<'a>(
     Ok(out)
 }
 
-fn parse_aux(text: &str) -> Result<PhotonData> {
-    let mut data = PhotonData::default();
+/// Parse one tabulation into `data`.
+///
+/// Each file still opens with its own `COMPTON` or `DENSITY` marker, so the same
+/// reader takes either and splitting them by source needed no format change.
+fn parse_aux_into(data: &mut PhotonData, text: &str) -> Result<()> {
     let mut section = "";
 
     for line in text.lines() {
@@ -179,7 +191,7 @@ fn parse_aux(text: &str) -> Result<PhotonData> {
             _ => return Err(bad("a photon data line before its section header")),
         }
     }
-    Ok(data)
+    Ok(())
 }
 
 impl PhotonData {
@@ -269,7 +281,12 @@ mod tests {
 
     fn load() -> PhotonData {
         let d = datafiles();
-        PhotonData::from_files(d.join("photon_aux.txt"), d.join("BREMX.DAT")).unwrap()
+        PhotonData::from_files(
+            d.join("compton_profiles_biggs1975.txt"),
+            d.join("density_effect_sternheimer1982.txt"),
+            d.join("BREMX.DAT"),
+        )
+        .unwrap()
     }
 
     #[test]
