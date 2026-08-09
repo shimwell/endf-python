@@ -115,4 +115,12 @@ jobs:
       - name: Test
         run: |
           python -c "import _endf"
-          python -m pytest -ra tests/test_rust_bindings.py
+          python -m pytest -ra tests/test_rust_bindings.py tests/test_rust_stub.py
+
+      # The stub is only worth shipping if a type checker can use it. This
+      # fails on a stub that is present but wrong, which the name comparison
+      # in test_rust_stub.py cannot see.
+      - name: Type-check against the stub
+        run: |
+          python -m pip install mypy
+          python -m mypy --strict crates/endf-py/typecheck.py
