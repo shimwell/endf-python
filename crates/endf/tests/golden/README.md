@@ -127,6 +127,7 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 | `Li6.ace` | An ACE Type 1 table; AND in all three shapes, DLW laws 3, 33 and 44, 15 reactions with photon production |
 | `synthetic-urr.ace` | The unresolved resonance block, which no small real table has |
 | `synthetic-laws.ace` | DLW laws 2, 4, 7, 9, 11, 61 and 66 |
+| `synthetic-denormal.ace` | The float form NJOY writes for a denormal, `6.10562372605-318` |
 
 ### Fixtures still wanted
 

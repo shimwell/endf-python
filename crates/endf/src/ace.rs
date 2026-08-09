@@ -413,6 +413,21 @@ mod tests {
         assert_eq!(parse_float("-2.5E-3").unwrap(), -2.5e-3);
         // NJOY drops the 'e' when the exponent needs three digits.
         assert_eq!(parse_float("1.234567-120").unwrap(), 1.234567e-120);
+        // The exact tokens that made TENDL-2025's Db262 and its neighbours
+        // unreadable: a three-digit exponent overflows the field NJOY has to
+        // write it in, so the `e` goes. See issue #20, and
+        // `tests/synthetic-denormal.ace.xz`, which pins both readers on a
+        // whole file.
+        assert_eq!(
+            parse_float("6.10562372605-318").unwrap(),
+            6.10562372605e-318
+        );
+        assert_eq!(
+            parse_float("-6.10562372605-318").unwrap(),
+            -6.10562372605e-318
+        );
+        // Rounded to the nearest subnormal, as any correct parser does.
+        assert_eq!(parse_float("9.99999999999-323").unwrap(), 1.0e-322);
         assert_eq!(parse_float("-9.8+100").unwrap(), -9.8e100);
         assert!(parse_float("banana").is_err());
     }
