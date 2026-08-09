@@ -89,29 +89,32 @@ ported.
 
 ## Coverage still wanted
 
-Every ENDF file the Python package parses now has a Rust parser, and all but two
-are exercised by a fixture. The exceptions are
+Every ENDF file the Python package parses now has a Rust parser, and all but one
+are exercised by a fixture. The exception is
 
-    MF 13 (photon production cross sections) and MF 40 (radionuclide
-    production covariances)
+    MF 40 (radionuclide production covariances)
 
-which are structurally complete and entirely unverified. The list is pinned in
-`golden.rs` as `UNCOVERED_BY_ANY_FIXTURE` and checked, so it cannot drift in
-either direction: the test fails both when a fixture starts covering one, and
-when a new parser arrives without coverage.
+which is structurally complete and unverified end to end, though the MF33
+subsection parser it delegates to is covered. The list is pinned in `golden.rs`
+as `UNCOVERED_BY_ANY_FIXTURE` and checked, so it cannot drift in either
+direction: the test fails both when a fixture starts covering one, and when a
+new parser arrives without coverage.
 
-`MF2` is worth a line of its own. It now has real resonance parameters —
-Reich-Moore from Fe56 and U235, and a Case C unresolved region from U235 — but
-single-level and multi-level Breit-Wigner, Adler-Adler, R-matrix limited (LRF=7)
-and unresolved Cases A and B are still untested. Cases A and B are additionally
-unreachable through the current dispatch; see issue #15.
+`MF2` is worth a line of its own. It has real Reich-Moore parameters from Fe56
+and U235, a Case C unresolved region from U235, and a synthetic multi-level
+Breit-Wigner section — but Adler-Adler, R-matrix limited (LRF=7) and unresolved
+Cases A and B are still untested. Cases A and B are additionally unreachable
+through the current dispatch; see issue #15.
 
 The distribution shapes are tracked the same way, in `DISTRIBUTION_SHAPES`:
 every angular, energy and joint angle-energy shape the dumpers can write has to
 appear in some golden file, or the test names the one that does not. Where no
-real table small enough to keep as a fixture holds a shape, one is built —
-`tools/make_urr_ace.py` and `tools/make_laws_ace.py` write synthetic tables
-whose values are invented but whose layout is the format's.
+real file small enough to keep as a fixture holds a shape, one is built.
+`tools/make_urr_ace.py`, `tools/make_laws_ace.py` and
+`tools/make_denormal_ace.py` write ACE tables; `tools/make_nfy_endf.py` and
+`tools/make_shapes_endf.py` write ENDF evaluations on top of the record writer
+in `tools/endf_writer.py`. The values are invented; the layout is the format's,
+which is the part both readers are being held to.
 
 Trimming a fixture down to the sections that matter is what `tools/trim_endf.py`
 is for. A full evaluation runs to tens of megabytes, most of it covariance
@@ -140,25 +143,22 @@ data — U235 is 36 MB whole and 451 KB with ten sections kept.
 | `synthetic-laws.ace` | DLW laws 2, 4, 7, 9, 11, 61 and 66 |
 | `synthetic-denormal.ace` | The float form NJOY writes for a denormal, `6.10562372605-318` |
 | `synthetic-nfy.endf` | MF8 MT=454 and MT=459, the fission product yields |
+| `synthetic-shapes.endf` | MF2 LRF=2 Breit-Wigner, MF5 LF=12 Madland-Nix, MF6 LANG=2 and LAW=6, MF13 |
 
 ### Fixtures still wanted
 
-- **MF13 and MF40**, the two parsers nothing exercises. MF13 appears in
-  evaluations that give photon production as a cross section rather than a
-  multiplicity; MF40 needs an evaluation with radionuclide production
-  covariances.
-- **MF6 with LANG=2 (Kalbach-Mann) and LAW=6 (n-body)**. LAW=1/LANG=1, LAW=2 and
-  LAW=4 are covered, but these two are not, and they are among the shapes an
-  Arrow projection needs columns for.
-- **MF2 formalisms other than Reich-Moore**: single-level and multi-level
-  Breit-Wigner, R-matrix limited (LRF=7), and unresolved Cases A and B. Note
-  that Cases A and B cannot be reached at all through the current dispatch —
-  see issue #15 — so a fixture alone will not cover them.
+- **MF40**, the one parser nothing exercises. It needs an evaluation with
+  radionuclide production covariances, and none small enough to keep here has
+  them. Unlike the shapes below, MF40 reuses the MF33 subsection parser that
+  Li6, Fe56 and U235 do cover, so what is untested is the wrapper around it.
+- **MF2 formalisms beyond Reich-Moore and Breit-Wigner**: R-matrix limited
+  (LRF=7), and unresolved Cases A and B. Note that Cases A and B cannot be
+  reached at all through the current dispatch — see issue #15 — so a fixture
+  alone will not cover them.
 - **Adler-Adler (LRF=4)**, which both readers reject rather than parse. A
   fixture would only pin that rejection.
-- **MF5 LF=12 (Madland-Nix)**. LF=1, LF=5, LF=7 and LF=9 are covered by Li6,
-  Am244 and U235; Madland-Nix has no fixture. The ACE side is complete apart
-  from law 5, which the Python reader cannot read at all — see issue #19.
+- **ACE law 5**, which the Python reader cannot read at all — see issue #19 —
+  so there is nothing to compare against. Every other ACE law is covered.
 - **A second ACE table of the same nuclide at another temperature**, which is
   what `add_temperature_from_ace` exists for. Only the "already present" path
   is exercised.

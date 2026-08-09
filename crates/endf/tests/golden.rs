@@ -2340,7 +2340,7 @@ fn unported_files_keep_their_text() {
 /// Kept as an explicit list rather than a remark in a commit message: the test
 /// below fails when a fixture starts covering one of them, which is the moment
 /// the entry should be deleted.
-const UNCOVERED_BY_ANY_FIXTURE: [i32; 2] = [13, 40];
+const UNCOVERED_BY_ANY_FIXTURE: [i32; 1] = [40];
 
 /// The MF files that have a Rust parser at all.
 const PORTED: [i32; 21] = [

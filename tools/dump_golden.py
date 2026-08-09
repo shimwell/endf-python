@@ -485,7 +485,8 @@ def dump_energy_distribution(d: Dump, p: str, dist) -> None:
         d.text(f"{p}/kind", "madland-nix")
         d.float(f"{p}/EFL", dist.efl)
         d.float(f"{p}/EFH", dist.efh)
-        d.tab1(f"{p}/T_M", dist.t_m)
+        # The attribute is `tm`, though the format calls the field T_M.
+        d.tab1(f"{p}/T_M", dist.tm)
     elif isinstance(dist, LevelInelastic):
         d.text(f"{p}/kind", "level-inelastic")
         d.float(f"{p}/threshold", dist.threshold)
@@ -1650,10 +1651,17 @@ def main() -> None:
     GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
     for path in paths:
         target = golden_for(path)
+        # Built whole in memory and written only once it is complete. Writing
+        # straight to the file leaves a truncated golden behind when the dump
+        # raises part way, and a truncated golden is worse than none: the Rust
+        # harness compares the two maps whole, so it reports every path after
+        # the failure as missing and buries the actual error.
+        buffer = io.StringIO()
+        dump(path, buffer)
         # The dumps are as repetitive as the evaluations they come from and
         # compress about seven to one, so they are stored the same way.
         with lzma.open(target, "wt", preset=9) as out:
-            dump(path, out)
+            out.write(buffer.getvalue())
         print(
             f"{target.relative_to(ROOT)}  <-  {path.relative_to(ROOT)}", file=sys.stderr
         )

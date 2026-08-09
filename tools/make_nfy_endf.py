@@ -25,6 +25,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from endf_writer import Section, descriptive, write_material  # noqa: E402
+
 #: MAT number of the synthetic evaluation. 9999 is unassigned.
 MAT = 9999
 
@@ -70,97 +73,17 @@ CUMULATIVE = [
 ]
 
 
-def endf_float(value: float) -> str:
-    """An 11-character ENDF float, e.g. ``' 9.223500+4'``."""
-    if value == 0.0:
-        return " 0.000000+0"
-    mantissa = f"{value:.6E}"
-    digits, exponent = mantissa.split("E")
-    power = int(exponent)
-    sign = "+" if power >= 0 else "-"
-    text = f"{digits}{sign}{abs(power)}"
-    # Six decimal places leaves room for a two-digit exponent and no more; drop
-    # one when the exponent needs three characters, as the format requires.
-    if len(text) > 11:
-        digits = f"{value:.5E}".split("E")[0]
-        text = f"{digits}{sign}{abs(power)}"
-    return text.rjust(11)
-
-
-def control(mf: int, mt: int, line_number: int) -> str:
-    """The MAT/MF/MT/NS trailer every record carries."""
-    return f"{MAT:>4}{mf:>2}{mt:>3}{line_number % 100000:>5}"
-
-
-class Section:
-    """Accumulates the records of one section, numbering them as it goes."""
-
-    def __init__(self, mf: int, mt: int) -> None:
-        self.mf = mf
-        self.mt = mt
-        self.lines: list[str] = []
-
-    def record(self, body: str) -> None:
-        self.lines.append(f"{body:<66}{control(self.mf, self.mt, len(self.lines) + 1)}")
-
-    def cont(self, c1: float, c2: float, l1: int, l2: int, n1: int, n2: int) -> None:
-        self.record(f"{endf_float(c1)}{endf_float(c2)}{l1:>11}{l2:>11}{n1:>11}{n2:>11}")
-
-    def values(self, values: list[float]) -> None:
-        for i in range(0, len(values), 6):
-            self.record("".join(endf_float(v) for v in values[i : i + 6]))
-
-    def text(self, body: str) -> None:
-        self.record(f"{body:<66}")
-
-    def finish(self) -> list[str]:
-        # SEND: MT=0, sequence number 99999.
-        return self.lines + [f"{'':<66}{MAT:>4}{self.mf:>2}{0:>3}{99999:>5}"]
-
-
-def mf1_mt451() -> list[str]:
-    """The descriptive section, the minimum a Material needs to be read."""
-    s = Section(1, 451)
-    # LRP=-1 (no resonance data), LFI=1 (fissile), NLIB=0, NMOD=0.
-    s.cont(ZA, AWR, -1, 1, 0, 0)
-    # ELIS, STA, LIS, LISO, 0, NFOR=6.
-    s.cont(0.0, 1.0, 0, 0, 0, 6)
-    # AWI=1 (neutron), EMAX, LREL, 0, NSUB=11 (neutron-induced fission yields),
-    # NVER.
-    s.cont(1.0, 2.0e7, 0, 0, 11, 8)
-    # TEMP, 0, LDRV, 0, NWD, NXC.
-    s.cont(0.0, 0.0, 0, 0, 5, 3)
-    # The first two text records are read by column, not by whitespace:
-    # ZSYMAM, ALAB, EDATE, AUTH on the first, then REF, DDATE, RDATE, ENDATE.
-    s.text(
-        f"{' 92-U -235':<11}{'SYNTH':<11}{'EVAL-JAN26':<10} "
-        f"{'tools/make_nfy_endf.py':<33}"
-    )
-    s.text(
-        f" {'synthetic, not real':<21}{'DIST-JAN26':<10} {'':<10}"
-        f"{'':<12}{'20260101':<8}"
-    )
-    s.text("----SYNTHETIC         MATERIAL 9999")
-    s.text("-----NEUTRON-INDUCED FISSION PRODUCT YIELDS")
-    s.text("------ENDF-6 FORMAT")
-    # The directory: MF, MT, number of records, MOD.
-    for mf, mt, count in [(1, 451, 9), (8, 454, 5), (8, 459, 5)]:
-        s.record(f"{'':>22}{mf:>11}{mt:>11}{count:>11}{0:>11}")
-    return s.finish()
-
-
 def yields_section(mt: int, sets: list[list[tuple[float, float, float, float]]]):
     """MF=8 MT=454 or MT=459: the yields at each incident energy."""
-    s = Section(8, mt)
+    s = Section(MAT, 8, mt)
     le_plus_one = len(sets)
     s.cont(ZA, AWR, le_plus_one, 0, 0, 0)
     for i, (energy, products) in enumerate(zip(ENERGIES, sets)):
         # L1 is LE+1 on the first energy and the interpolation scheme after,
         # which is the overload both readers have to reproduce.
         l1 = le_plus_one if i == 0 else INTERPOLATION
-        s.cont(energy, 0.0, l1, 0, 4 * len(products), len(products))
         flat = [v for product in products for v in product]
-        s.values(flat)
+        s.list_record(energy, 0.0, l1, 0, len(products), flat)
     return s.finish()
 
 
@@ -169,19 +92,28 @@ def main() -> None:
         sys.exit(__doc__)
     target = Path(sys.argv[1])
 
-    def terminator(mat: int) -> str:
-        return f"{'':<66}{mat:>4}{0:>2}{0:>3}{0:>5}"
+    sections = [
+        descriptive(
+            MAT,
+            ZA,
+            AWR,
+            # NSUB=11, neutron-induced fission product yields.
+            11,
+            [(1, 451, 9), (8, 454, 5), (8, 459, 5)],
+            " 92-U -235",
+            [
+                "----SYNTHETIC         MATERIAL 9999",
+                "-----NEUTRON-INDUCED FISSION PRODUCT YIELDS",
+                "------ENDF-6 FORMAT",
+            ],
+            author="tools/make_nfy_endf.py",
+            lfi=1,
+        ),
+        yields_section(454, INDEPENDENT),
+        yields_section(459, CUMULATIVE),
+    ]
+    write_material(target, MAT, sections)
 
-    lines = [terminator(1)]  # TPID
-    lines += mf1_mt451()
-    lines.append(terminator(MAT))  # FEND, closing MF=1
-    lines += yields_section(454, INDEPENDENT)
-    lines += yields_section(459, CUMULATIVE)
-    lines.append(terminator(MAT))  # FEND, closing MF=8
-    lines.append(terminator(0))  # MEND
-    lines.append(terminator(-1))  # TEND
-
-    target.write_text("\n".join(lines) + "\n")
     products = sum(len(s) for s in INDEPENDENT) + sum(len(s) for s in CUMULATIVE)
     print(f"{target}: {len(ENERGIES)} energies, {products} yields", file=sys.stderr)
 
