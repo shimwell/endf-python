@@ -140,6 +140,70 @@ def test_gnds_names_match():
         assert _endf.gnds_name(z, a, m) == endf.data.gnds_name(z, a, m)
 
 
+def test_zam_matches():
+    for name in ["H1", "Am242_m1", "In116_m2", "Fe56", "n1"]:
+        assert _endf.zam(name) == endf.data.zam(name)
+
+
+def test_temperature_str_matches():
+    for t in [0.0, 293.6, 250.0, 900.0, 1200.4, 2500.0]:
+        assert _endf.temperature_str(t) == endf.data.temperature_str(t)
+
+
+def test_photon_reaction_names_match():
+    for mt in range(500, 600):
+        assert _endf.photon_reaction_name(
+            mt
+        ) == endf.incident_photon.PHOTON_REACTION_NAME.get(mt)
+    for name, mt in endf.incident_photon.PHOTON_REACTION_MT.items():
+        assert _endf.photon_reaction_mt(name) == mt
+
+
+def test_decay_modes_match():
+    # RTYP packs a chain of modes as the digits of a decimal.
+    for rtyp in [0.0, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 7.0, 1.4, 2.4, 1.55]:
+        assert _endf.decay_modes(rtyp) == endf.decay.get_decay_modes(rtyp)
+
+
+def test_normalise_branch_ratios_matches():
+    for ratios in [[1.0], [0.5, 0.5], [2.0, 3.0, 5.0], [0.0, 0.0]]:
+        reference = list(ratios)
+        endf.chain.normalise_branch_ratios(reference)
+        assert _endf.normalise_branch_ratios(ratios) == pytest.approx(reference)
+
+
+def test_module_tables_match():
+    assert _endf.ATOMIC_SYMBOL == {
+        z: s for z, s in endf.data.ATOMIC_SYMBOL.items() if isinstance(z, int)
+    }
+    assert _endf.SUM_RULES == endf.data.SUM_RULES
+    assert _endf.INTERPOLATION_SCHEME == endf.function.INTERPOLATION_SCHEME
+    assert tuple(_endf.FISSION_MTS) == tuple(endf.reaction.FISSION_MTS)
+    assert _endf.EV_PER_MEV == endf.data.EV_PER_MEV
+    assert _endf.K_BOLTZMANN == endf.data.K_BOLTZMANN
+
+
+def test_interpret_picks_the_class_by_sublibrary(am244, rust_am244):
+    # NSUB=10, an incident-neutron evaluation.
+    assert isinstance(am244.interpret(), endf.IncidentNeutron)
+    assert isinstance(rust_am244.interpret(), _endf.IncidentNeutron)
+    assert rust_am244.interpret().name == am244.interpret().name
+
+    # NSUB=3, photoatomic.
+    reference = endf.Material(fixture("photoat-001_H_000.endf.xz"))
+    material = _endf.Material(fixture("photoat-001_H_000.endf.xz"))
+    assert isinstance(reference.interpret(), endf.IncidentPhoton)
+    assert isinstance(material.interpret(), _endf.IncidentPhoton)
+    assert material.interpret().atomic_number == reference.interpret().atomic_number
+
+    # NSUB=12, thermal scattering, which neither reader has a class for.
+    tsl = _endf.Material(fixture("tsl-s-CH4.endf.xz"))
+    with pytest.raises(ValueError):
+        tsl.interpret()
+    with pytest.raises(NotImplementedError):
+        endf.Material(fixture("tsl-s-CH4.endf.xz")).interpret()
+
+
 def test_incident_neutron_from_endf(am244, rust_am244):
     reference = endf.IncidentNeutron.from_endf(am244)
     nuclide = _endf.IncidentNeutron.from_endf(rust_am244)

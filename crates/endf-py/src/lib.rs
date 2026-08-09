@@ -297,6 +297,23 @@ impl PyMaterial {
         })
     }
 
+    /// The high-level interface for this material's sublibrary.
+    ///
+    /// An `IncidentNeutron` for NSUB=10 or an `IncidentPhoton` for NSUB=3.
+    /// Anything else raises, as it does upstream.
+    fn interpret(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match self.inner.interpret().map_err(to_py_err)? {
+            endf::Interpretation::IncidentNeutron(n) => Ok(PyIncidentNeutron { inner: *n }
+                .into_pyobject(py)?
+                .into_any()
+                .unbind()),
+            endf::Interpretation::IncidentPhoton(p) => Ok(PyIncidentPhoton { inner: *p }
+                .into_pyobject(py)?
+                .into_any()
+                .unbind()),
+        }
+    }
+
     /// The MF=3 cross section for a reaction, or None.
     fn mf3(&self, mt: i32) -> Option<PyCrossSection> {
         self.inner
@@ -2635,6 +2652,85 @@ fn py_gnds_name(z: u32, a: u32, m: u32) -> String {
     endf::gnds_name(z, a, m)
 }
 
+/// The (Z, A, metastable state) a GNDS name denotes, e.g. `zam("Am242_m1")`.
+#[pyfunction]
+#[pyo3(name = "zam")]
+fn py_zam(name: &str) -> PyResult<(u32, u32, u32)> {
+    endf::zam(name).map_err(to_py_err)
+}
+
+/// A temperature in kelvin as the string ACE and HDF5 libraries key on.
+#[pyfunction]
+#[pyo3(name = "temperature_str")]
+fn py_temperature_str(t: f64) -> String {
+    endf::data::temperature_str(t)
+}
+
+/// The name of a photon reaction, e.g. `"coherent"` for MT=502.
+#[pyfunction]
+#[pyo3(name = "photon_reaction_name")]
+fn py_photon_reaction_name(mt: i32) -> Option<&'static str> {
+    endf::incident_photon::photon_reaction_name(mt)
+}
+
+/// The MT of a named photon reaction.
+#[pyfunction]
+#[pyo3(name = "photon_reaction_mt")]
+fn py_photon_reaction_mt(name: &str) -> Option<i32> {
+    endf::incident_photon::photon_reaction_mt(name)
+}
+
+/// The decay modes an ENDF RTYP value names, in order.
+///
+/// RTYP packs a chain as the digits of a decimal, so `1.5` is a beta- decay
+/// followed by a spontaneous fission.
+#[pyfunction]
+#[pyo3(name = "decay_modes")]
+fn py_decay_modes(rtyp: f64) -> Vec<&'static str> {
+    endf::decay::decay_modes(rtyp)
+}
+
+/// Scale branching ratios so they sum to one, in place, as a chain needs.
+#[pyfunction]
+#[pyo3(name = "normalise_branch_ratios")]
+fn py_normalise_branch_ratios(mut ratios: Vec<f64>) -> Vec<f64> {
+    endf::chain::normalise_branch_ratios(&mut ratios);
+    ratios
+}
+
+/// Register the constant tables the Python package exposes at module level.
+///
+/// Each is built here rather than stored, because the crate holds them as
+/// arrays and the Python package as dictionaries; the mapping is the point.
+fn add_tables(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    let py = m.py();
+
+    let symbols = PyDict::new(py);
+    for (z, symbol) in endf::data::ATOMIC_SYMBOL.iter().enumerate() {
+        symbols.set_item(z, symbol)?;
+    }
+    m.add("ATOMIC_SYMBOL", symbols)?;
+
+    let sum_rules = PyDict::new(py);
+    for (mt, parts) in endf::data::SUM_RULES {
+        sum_rules.set_item(mt, parts.to_vec())?;
+    }
+    m.add("SUM_RULES", sum_rules)?;
+
+    // 1 to 5, the ENDF codes; `from_endf_code` rejects anything else.
+    let schemes = PyDict::new(py);
+    for code in 1..=5 {
+        let scheme = endf::univariate::Interpolation::from_endf_code(code).map_err(to_py_err)?;
+        schemes.set_item(code, scheme.name())?;
+    }
+    m.add("INTERPOLATION_SCHEME", schemes)?;
+
+    m.add("FISSION_MTS", endf::FISSION_MTS.to_vec())?;
+    m.add("EV_PER_MEV", endf::EV_PER_MEV)?;
+    m.add("K_BOLTZMANN", endf::K_BOLTZMANN)?;
+    Ok(())
+}
+
 #[pymodule]
 fn _endf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_float_endf, m)?)?;
@@ -2647,6 +2743,13 @@ fn _endf(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_reaction_name, m)?)?;
     m.add_function(wrap_pyfunction!(py_reaction_mt, m)?)?;
     m.add_function(wrap_pyfunction!(py_gnds_name, m)?)?;
+    m.add_function(wrap_pyfunction!(py_zam, m)?)?;
+    m.add_function(wrap_pyfunction!(py_temperature_str, m)?)?;
+    m.add_function(wrap_pyfunction!(py_photon_reaction_name, m)?)?;
+    m.add_function(wrap_pyfunction!(py_photon_reaction_mt, m)?)?;
+    m.add_function(wrap_pyfunction!(py_decay_modes, m)?)?;
+    m.add_function(wrap_pyfunction!(py_normalise_branch_ratios, m)?)?;
+    add_tables(m)?;
     m.add_class::<PyMaterial>()?;
     m.add_class::<PyProduct>()?;
     m.add_class::<PyReaction>()?;

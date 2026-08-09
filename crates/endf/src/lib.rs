@@ -53,7 +53,7 @@ pub use fission_energy::FissionEnergyRelease;
 pub use function::{Polynomial, Tabulated1D, Tabulated2D};
 pub use incident_neutron::IncidentNeutron;
 pub use incident_photon::{AtomicRelaxation, IncidentPhoton, PhotonReaction};
-pub use material::{get_materials, materials_from_str, Material, Section};
+pub use material::{get_materials, materials_from_str, Interpretation, Material, Section};
 pub use product::{EmissionMode, Product, Yield};
 pub use radionuclide_production::{
     isomer_table, isomer_table_from_materials, level_to_isomeric_state, radionuclide_production,

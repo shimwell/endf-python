@@ -111,6 +111,14 @@ fn control(line: &str) -> Result<(i32, i32, i32)> {
     ))
 }
 
+/// What [`Material::interpret`] built, one variant per sublibrary that has a
+/// high-level interface.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Interpretation {
+    IncidentNeutron(Box<crate::IncidentNeutron>),
+    IncidentPhoton(Box<crate::IncidentPhoton>),
+}
+
 impl Material {
     /// Parse the first material in `text`, skipping the leading TPID record.
     ///
@@ -383,6 +391,32 @@ impl Material {
         }
     }
 
+    /// Build the high-level interface the material's sublibrary calls for.
+    ///
+    /// NSUB in MF=1 MT=451 says which: 3 is photoatomic, 10 incident neutron.
+    /// A photoatomic evaluation is interpreted on its own, so any atomic
+    /// relaxation data has to come from its own MF=28; pass a separate
+    /// evaluation to [`IncidentPhoton::from_endf`] directly when there is one.
+    pub fn interpret(&self) -> Result<Interpretation> {
+        let nsub = self
+            .mf1_mt451()
+            .ok_or(Error::Unsupported {
+                what: "a material with no MF=1 MT=451 to interpret",
+            })?
+            .nsub;
+        match nsub {
+            3 => Ok(Interpretation::IncidentPhoton(Box::new(
+                crate::IncidentPhoton::from_endf(self, None)?,
+            ))),
+            10 => Ok(Interpretation::IncidentNeutron(Box::new(
+                crate::IncidentNeutron::from_endf(self)?,
+            ))),
+            _ => Err(Error::Unsupported {
+                what: "a sublibrary with no high-level interface (NSUB is not 3 or 10)",
+            }),
+        }
+    }
+
     /// A neutron yield: MT=452 total, MT=456 prompt.
     pub fn mf1_mt452(&self, mt: i32) -> Option<&mf::mf1::Mf1Mt452> {
         match self.section_data.get(&(1, mt))? {
@@ -536,5 +570,30 @@ mod tests {
         let materials = materials_from_str(&crate::testdata::text(FIXTURE)).unwrap();
         assert_eq!(materials.len(), 1);
         assert_eq!(materials[0].mat, 9552);
+    }
+
+    #[test]
+    fn interprets_by_sublibrary() {
+        let neutron = Material::from_str(&crate::testdata::text(FIXTURE)).unwrap();
+        match neutron.interpret().unwrap() {
+            Interpretation::IncidentNeutron(n) => assert_eq!(n.name(), "Am244"),
+            other => panic!("NSUB=10 gave {other:?}"),
+        }
+
+        const PHOTOATOMIC: &[u8] = include_bytes!("../../../tests/photoat-001_H_000.endf.xz");
+        let photon = Material::from_str(&crate::testdata::text(PHOTOATOMIC)).unwrap();
+        match photon.interpret().unwrap() {
+            Interpretation::IncidentPhoton(p) => assert_eq!(p.atomic_number, 1),
+            other => panic!("NSUB=3 gave {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_sublibrary_with_no_interface_says_so() {
+        // Thermal scattering: NSUB=12, which has no high-level class in either
+        // reader.
+        const TSL: &[u8] = include_bytes!("../../../tests/tsl-s-CH4.endf.xz");
+        let m = Material::from_str(&crate::testdata::text(TSL)).unwrap();
+        assert!(m.interpret().is_err());
     }
 }
