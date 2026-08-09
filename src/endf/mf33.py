@@ -19,7 +19,9 @@ def parse_mf33_subsection(file_obj) -> dict:
             subsub = {'LTY': LTY, 'E1': E1, 'E2': E2, 'NCI': NCI}
             subsub['CI'] = values[::2]
             subsub['XMTI'] = values[1::2]
-            subsection['nc_subsections'].append(subsub)
+            # No append here: the one below runs for both branches. Appending
+            # in this one too put every LTY=0 subsection in the list twice.
+            # See issue #12.
         else:
             (E1, E2, MATS, MTS, _, NEI), values = get_list_record(file_obj)
             subsub = {'LTY': LTY, 'E1': E1, 'E2': E2, 'MATS': MATS,

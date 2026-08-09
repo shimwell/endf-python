@@ -132,13 +132,9 @@ pub fn parse_mf33_subsection(reader: &mut Reader) -> Result<Mf33Subsection> {
                 ..Default::default()
             }
         };
-        // NOTE: the LTY=0 branch upstream appends inside the `if` and again
-        // after the `if/else`, so those entries appear twice. Reproduced so
-        // the two readers agree; see
+        // One entry per subsection, whatever LTY is. Both readers used to
+        // append the LTY=0 case twice; see
         // <https://github.com/shimwell/endf-python/issues/12>.
-        if lty == 0 {
-            sub.nc_subsections.push(subsub.clone());
-        }
         sub.nc_subsections.push(subsub);
     }
 
@@ -226,9 +222,10 @@ pub fn parse_mf33(reader: &mut Reader) -> Result<Mf33> {
 /// The covariance blocks of one (L, L1) pair.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Mf34SubSubsection {
+    /// The symmetry flag of each covariance block.
     pub ls: Vec<f64>,
-    /// Upstream fills this with LS rather than the LB it reads. Reproduced so
-    /// the two readers agree; see
+    /// The covariance matrix type of each block. Both readers used to fill
+    /// this with LS; see
     /// <https://github.com/shimwell/endf-python/issues/18>.
     pub lb: Vec<f64>,
     pub nt: Vec<f64>,
@@ -258,13 +255,11 @@ pub struct Mf34 {
     pub awr: f64,
     pub ltt: i64,
     pub nmt1: i64,
-    /// Always empty.
+    /// One per (MAT1, MT1) pair the section covers.
     ///
-    /// Upstream builds each subsection and never appends it, so the parsed
-    /// data is discarded. Reproduced so the two readers agree; see
-    /// <https://github.com/shimwell/endf-python/issues/18>. The subsections
-    /// are still read off the stream, so nothing desynchronises, and
-    /// correcting it upstream is a one-line change here too.
+    /// Both readers used to build these and then drop them on the floor, so
+    /// this was always empty; see
+    /// <https://github.com/shimwell/endf-python/issues/18>.
     pub subsections: Vec<Mf34Subsection>,
 }
 
@@ -272,7 +267,7 @@ pub struct Mf34 {
 /// the subsection count depends on.
 pub fn parse_mf34(reader: &mut Reader, mt: i64) -> Result<Mf34> {
     let head = reader.head_record()?;
-    let data = Mf34 {
+    let mut data = Mf34 {
         za: head.za,
         awr: head.awr,
         ltt: head.l2,
@@ -312,10 +307,8 @@ pub fn parse_mf34(reader: &mut Reader, mt: i64) -> Result<Mf34> {
             let mut subsub = Mf34SubSubsection::default();
             for _ in 0..ni.max(0) {
                 let list = reader.list_record()?;
-                let ls = list.cont.l1;
-                subsub.ls.push(ls as f64);
-                // Upstream writes LS here, not the LB it read. See issue #18.
-                subsub.lb.push(ls as f64);
+                subsub.ls.push(list.cont.l1 as f64);
+                subsub.lb.push(list.cont.l2 as f64);
                 subsub.nt.push(list.cont.n1 as f64);
                 subsub.ne.push(list.cont.n2 as f64);
                 subsub.data.push(list.values);
@@ -323,10 +316,7 @@ pub fn parse_mf34(reader: &mut Reader, mt: i64) -> Result<Mf34> {
             sub.subsubsections.push(subsub);
         }
 
-        // Upstream never appends `sub` to `data.subsections`; see issue #18.
-        // The records above are still consumed, which is what keeps the reader
-        // in step with the file.
-        let _ = sub;
+        data.subsections.push(sub);
     }
 
     Ok(data)
@@ -402,11 +392,13 @@ mod tests {
         format!("{:<66}9999341251\n", fields.concat())
     }
 
-    /// Both MF=34 defects are pinned so that fixing them upstream shows up as
-    /// a failing test rather than a silent behaviour change.
-    /// See <https://github.com/shimwell/endf-python/issues/18>.
+    /// MF=34 keeps its subsections, and LB holds LB rather than a copy of LS.
+    /// Both were broken; see
+    /// <https://github.com/shimwell/endf-python/issues/18>.
     #[test]
-    fn mf34_discards_its_subsections_and_copies_ls_into_lb() {
+    fn mf34_keeps_its_subsections_and_reads_lb() {
+        // NMT1=1; one (L, L1) pair; one NI block with LS=7 and LB=5, chosen
+        // so that copying one into the other is unmistakable.
         let text = line([f(26000.0), f(55.365), i(0), i(1), i(0), i(1)])
             + &line([f(0.0), f(0.0), i(0), i(0), i(1), i(1)])
             + &line([f(0.0), f(0.0), i(1), i(1), i(1), i(1)])
@@ -414,11 +406,18 @@ mod tests {
             + &line([f(1.0), f(2.0), f(0.0), f(0.0), f(0.0), f(0.0)]);
 
         let d = parse_mf34(&mut Reader::new(&text), 251).unwrap();
-        assert_eq!(d.nmt1, 1, "the header says there is one subsection");
-        assert!(
-            d.subsections.is_empty(),
-            "upstream discards them, so this reader does too"
-        );
+        assert_eq!(d.nmt1, 1);
+        assert_eq!(d.subsections.len(), 1, "the parsed subsection is kept");
+
+        let sub = &d.subsections[0];
+        assert_eq!(sub.nl, 1);
+        assert_eq!(sub.subsubsections.len(), 1);
+
+        let subsub = &sub.subsubsections[0];
+        assert_eq!(subsub.ls, [7.0], "LS is the symmetry flag");
+        assert_eq!(subsub.lb, [5.0], "LB is the matrix type, not a copy of LS");
+        assert_eq!(subsub.nt, [2.0]);
+        assert_eq!(subsub.data[0], [1.0, 2.0]);
     }
 
     #[test]

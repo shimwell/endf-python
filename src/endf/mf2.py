@@ -48,8 +48,12 @@ def parse_mf2(file_obj: TextIO) -> dict:
             elif LRU in (0, 1):
                 # resolved resonance region
                 rrange.update(_FORMALISMS[LRF].dict_from_endf(file_obj, NRO))
-            elif LRF == 2:
-                # unresolved resonance region
+            elif LRU == 2:
+                # Unresolved resonance region. LRU says resolved or unresolved;
+                # LRF selects the formalism within the range. Testing LRF here
+                # skipped Cases A and B entirely (LRU=2 with LRF=1) and left
+                # their records on the stream, so the next range was read from
+                # the middle of this one. See issue #15.
                 rrange.update(Unresolved.dict_from_endf(file_obj, LFW, LRF, NRO))
             iso['ranges'].append(rrange)
 

@@ -1338,12 +1338,13 @@ def dump_decay_section(d: Dump, path: str, decay) -> None:
 
     if not n["stable"]:
         d.floats(f"{path}/half_life", [decay.half_life.n, decay.half_life.s])
-        # A half-life of zero means it was not evaluated. The Python property
-        # divides by it and raises; see issue #23. The Rust reader returns
-        # nothing, so there is nothing to compare either way.
-        if decay.half_life.n != 0.0:
-            c = decay.decay_constant
-            d.floats(f"{path}/decay_constant", [c.n, c.s])
+        # A half-life of zero means it was not evaluated, and both readers now
+        # return nothing rather than dividing by it (issue #23). Dumped as an
+        # empty list rather than skipped, so the two are held to agreeing that
+        # there is no decay constant, instead of the path simply being absent
+        # on both sides.
+        c = decay.decay_constant
+        d.floats(f"{path}/decay_constant", [] if c is None else [c.n, c.s])
     e = decay.decay_energy
     d.floats(f"{path}/decay_energy", [e.n, e.s])
     for key, value in sorted(decay.average_energies.items()):

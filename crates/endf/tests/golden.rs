@@ -1052,10 +1052,17 @@ fn dump_decay_section(d: &mut Dump, path: &str, decay: &endf::Decay) {
 
     if !n.stable {
         d.floats(format!("{path}/half_life"), pair(decay.half_life.unwrap()));
-        // A half-life of zero means it was not evaluated; see issue #23.
-        if let Some(constant) = decay.decay_constant() {
-            d.floats(format!("{path}/decay_constant"), pair(constant));
-        }
+        // A half-life of zero means it was not evaluated, and both readers
+        // return nothing for it rather than dividing by it (issue #23). Dumped
+        // either way, so the absence is compared rather than skipped on both
+        // sides at once.
+        d.floats(
+            format!("{path}/decay_constant"),
+            match decay.decay_constant() {
+                Some(constant) => pair(constant).to_vec(),
+                None => Vec::new(),
+            },
+        );
     }
     d.floats(format!("{path}/decay_energy"), pair(decay.decay_energy()));
     for (key, value) in &decay.average_energies {

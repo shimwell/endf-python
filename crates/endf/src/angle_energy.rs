@@ -120,10 +120,10 @@ impl AngleEnergy {
                 idx,
                 location_dist,
             )?),
-            // Law 5 is the general evaporation spectrum. The Python reader
-            // calls a `from_ace` that its `GeneralEvaporation` does not define
-            // and dies with an AttributeError, so there is no behaviour to
-            // match here; see issue #19.
+            // Law 5 is the general evaporation spectrum, which neither this
+            // reader nor the Python one nor OpenMC implements. Both of those
+            // now raise NotImplementedError; this is the same refusal. See
+            // issue #19.
             5 => {
                 return Err(Error::Unsupported {
                     what: "ACE law 5, the general evaporation spectrum",

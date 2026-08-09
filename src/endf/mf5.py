@@ -201,6 +201,19 @@ class GeneralEvaporation(EnergyDistribution):
         self.g = g
         self.u = u
 
+    @classmethod
+    def from_ace(cls, ace, idx=0):
+        """Not implemented: ACE law 5 is not read.
+
+        `AngleEnergy.from_ace` dispatches here for law 5, so without this the
+        call fails with `AttributeError` and reads like an internal error
+        rather than an unsupported format. OpenMC carries the same stub. See
+        issue #19.
+        """
+        raise NotImplementedError(
+            "ACE law 5 (general evaporation) is not implemented"
+        )
+
     @staticmethod
     def dict_from_endf(file_obj: TextIO, params: list) -> dict:
         """Parse general evaporation spectrum (MF=5)

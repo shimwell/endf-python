@@ -1615,7 +1615,8 @@ fn mf34_dict<'py>(py: Python<'py>, s: &endf::mf::covariance::Mf34) -> PyResult<B
     d.set_item("AWR", s.awr)?;
     d.set_item("LTT", s.ltt)?;
     d.set_item("NMT1", s.nmt1)?;
-    // Always empty, matching upstream; see issue #18.
+    // Empty until issue #18 was fixed, when both readers started keeping the
+    // subsections they had already parsed.
     let subs: PyResult<Vec<_>> = s
         .subsections
         .iter()

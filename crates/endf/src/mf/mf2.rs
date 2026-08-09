@@ -586,10 +586,12 @@ pub fn parse_mf2(reader: &mut Reader) -> Result<Mf2> {
                         })
                     }
                 }
-            } else if lrf == 2 {
-                // Deliberately `lrf`, not `lru`, so an unresolved range written
-                // with LRF=1 falls through unread exactly as it does in the
-                // Python reader. See
+            } else if lru == 2 {
+                // `lru`, because LRU is what says resolved or unresolved; LRF
+                // only selects the formalism within the range. Both readers
+                // tested LRF here, which skipped Cases A and B (LRU=2 with
+                // LRF=1) and left their records unread, so the next range was
+                // parsed from the middle of this one. Fixed in
                 // <https://github.com/shimwell/endf-python/issues/15>.
                 ResonanceParameters::Unresolved(Box::new(parse_unresolved(
                     reader, iso.lfw, lrf, nro,
@@ -641,12 +643,15 @@ mod tests {
         }
     }
 
-    /// The upstream dispatch reads LRF where it means LRU, so a Case A
-    /// unresolved range is skipped. Pinned here so that correcting it upstream
-    /// shows up as a failing test rather than a silent behaviour change.
-    /// See <https://github.com/shimwell/endf-python/issues/15>.
+    /// An unresolved range with LRF=1 — Case A — is read, and its records are
+    /// consumed so a following range stays aligned.
+    ///
+    /// Both readers used to dispatch on LRF here where the format uses LRU, so
+    /// this range matched no branch: its parameters were dropped and its
+    /// records were left on the stream. See
+    /// <https://github.com/shimwell/endf-python/issues/15>.
     #[test]
-    fn an_unresolved_range_with_lrf_1_is_not_read() {
+    fn an_unresolved_range_with_lrf_1_is_read() {
         // Plain decimals, right-justified in the format's 11-column fields.
         // `float_endf` reads these as readily as the e-less exponential form.
         fn f(v: f64) -> String {
@@ -659,16 +664,48 @@ mod tests {
             format!("{:<66}9999 2151\n", fields.concat())
         }
 
+        // NIS=1; LFW=0 and NER=2, so a Case A range and then a resolved one.
         let text = line([f(95244.0), f(241.968), i(0), i(0), i(1), i(0)])
-            + &line([f(95244.0), f(1.0), i(0), i(0), i(1), i(0)])
-            + &line([f(100.0), f(1000.0), i(2), i(1), i(0), i(1)])
+            + &line([f(95244.0), f(1.0), i(0), i(0), i(2), i(0)])
+            // Range 1: LRU=2, LRF=1.
+            + &line([f(100.0), f(1000.0), i(2), i(1), i(0), i(0)])
             + &line([f(2.5), f(0.9), i(0), i(0), i(1), i(0)])
             + &line([f(241.968), f(0.0), i(0), i(0), i(6), i(1)])
-            + &line([f(10.0), f(3.0), f(1.0), f(0.5), f(0.04), f(0.0)]);
+            + &line([f(10.0), f(3.0), f(1.0), f(0.5), f(0.04), f(0.0)])
+            // Range 2: LRU=1, LRF=2, one resonance. Only reachable if the
+            // range above consumed exactly its own two records.
+            + &line([f(1000.0), f(9000.0), i(1), i(2), i(0), i(0)])
+            + &line([f(2.5), f(0.9), i(0), i(0), i(1), i(0)])
+            + &line([f(241.968), f(0.0), i(0), i(0), i(6), i(1)])
+            + &line([f(500.0), f(3.0), f(1.2), f(1.0), f(0.2), f(0.0)]);
 
         let d = parse_mf2(&mut Reader::new(&text)).unwrap();
+        assert_eq!(d.isotopes[0].ranges.len(), 2);
+
         let range = &d.isotopes[0].ranges[0];
         assert_eq!((range.lru, range.lrf), (2, 1));
-        assert_eq!(range.parameters, ResonanceParameters::Absent);
+        match &range.parameters {
+            ResonanceParameters::Unresolved(u) => {
+                assert_eq!(u.spi, 2.5);
+                assert_eq!(u.ap, 0.9);
+                assert_eq!(u.nls, 1);
+                // Case A: energy-independent parameters, not a `parameters`
+                // list, which is what Cases B and C build.
+                assert_eq!(u.ranges[0].d, [10.0]);
+                assert_eq!(u.ranges[0].gno, [0.5]);
+                assert!(u.ranges[0].parameters.is_empty());
+            }
+            other => panic!("expected unresolved Case A parameters, got {other:?}"),
+        }
+
+        // The dangerous half: before the fix this came back as the leftovers
+        // of the range above rather than as its own header.
+        let after = &d.isotopes[0].ranges[1];
+        assert_eq!((after.lru, after.lrf), (1, 2));
+        assert_eq!((after.el, after.eh), (1000.0, 9000.0));
+        match &after.parameters {
+            ResonanceParameters::BreitWigner(b) => assert_eq!(b.sections[0].er, [500.0]),
+            other => panic!("expected Breit-Wigner parameters, got {other:?}"),
+        }
     }
 }
