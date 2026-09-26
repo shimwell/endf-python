@@ -216,3 +216,94 @@ def test_ace_law_5_raises_not_implemented():
 
     with pytest.raises(NotImplementedError, match="law 5"):
         GeneralEvaporation.from_ace(None, 0)
+
+
+# ---------------------------------------------------------------------------
+# Issue #25 -- MF=33 LB=0 to 4 split its E-tables at NT - NP, not 2*(NP - LT)
+# ---------------------------------------------------------------------------
+
+
+def _lb_list(lt, lb, pairs):
+    """An NI subsection holding one LB=0 to 4 LIST record of `pairs`."""
+    from io import StringIO
+
+    def line(fields):
+        return f"{''.join(f'{v:>11}' for v in fields):<66}9228331\n"
+
+    values = [v for pair in pairs for v in pair]
+    values += [0.0] * (-len(values) % 6)
+    text = line([0.0, 0.0, 0, 0, 0, 1]) + line(
+        [0.0, 0.0, lt, lb, 2 * len(pairs), len(pairs)]
+    )
+    for i in range(0, len(values), 6):
+        text += line(values[i:i + 6])
+    return StringIO(text)
+
+
+def test_mf33_lb1_keeps_its_one_table_whole():
+    """LT=0 means one table. NP is odd, so the old split also started El on an
+    F value, swapping El and Fl as well as truncating Ek."""
+    from endf.mf33 import parse_mf33_subsection
+
+    pairs = [(1.0e-5, 0.0), (8.0e5, 0.01125), (2.0e7, 0.0)]
+    ni = parse_mf33_subsection(_lb_list(0, 1, pairs))["ni_subsections"][0]
+    assert list(ni["Ek"]) == [1.0e-5, 8.0e5, 2.0e7]
+    assert list(ni["Fk"]) == [0.0, 0.01125, 0.0]
+    assert list(ni["El"]) == [] and list(ni["Fl"]) == []
+
+
+def test_mf33_lb3_splits_at_the_second_tables_own_length():
+    """NP - LT pairs, then LT: three and two here, where NT - NP would have
+    split two and a half pairs in."""
+    from endf.mf33 import parse_mf33_subsection
+
+    pairs = [(1.0, 0.1), (2.0, 0.2), (3.0, 0.0), (1.0, 0.3), (3.0, 0.0)]
+    ni = parse_mf33_subsection(_lb_list(2, 3, pairs))["ni_subsections"][0]
+    assert list(ni["Ek"]) == [1.0, 2.0, 3.0]
+    assert list(ni["Fk"]) == [0.1, 0.2, 0.0]
+    assert list(ni["El"]) == [1.0, 3.0]
+    assert list(ni["Fl"]) == [0.3, 0.0]
+
+
+@pytest.fixture(scope="module")
+def ni58_fendl():
+    return endf.Material(fixture("n_2825_28-Ni-58_trimmed.fendl32d.endf.xz"))
+
+
+def test_a_real_lb1_table_runs_to_20_mev(ni58_fendl):
+    """FENDL-3.2d Ni58 (n,a), the block that gives it 16.8% at 13 to 16 MeV.
+
+    Split at NT - NP it ended at 4 MeV, and everything above went to El."""
+    blocks = ni58_fendl.section_data[33, 107]["subsections"][0]["ni_subsections"]
+    ni = blocks[2]
+    assert (ni["LB"], ni["LT"], ni["NP"]) == (1, 0, 12)
+    assert len(ni["Ek"]) == ni["NP"]
+    assert ni["Ek"][-1] == 2.0e7
+    assert ni["Fk"][list(ni["Ek"]).index(1.3e7)] == pytest.approx(2.8125e-2)
+    assert list(ni["El"]) == [] and list(ni["Fl"]) == []
+
+
+def test_every_lb0_to_2_block_has_one_table(ni58_fendl):
+    """Every LB=0 to 2 block on the tape has LT=0, whatever NP's parity."""
+    seen = 0
+    for mt in (28, 103, 107):
+        for sub in ni58_fendl.section_data[33, mt]["subsections"]:
+            for ni in sub["ni_subsections"]:
+                if ni["LB"] > 2:
+                    continue
+                assert ni["LT"] == 0
+                assert len(ni["Ek"]) == len(ni["Fk"]) == ni["NP"]
+                assert list(ni["El"]) == []
+                seen += 1
+    assert seen == 6
+
+
+def test_the_lb4_block_still_splits_in_half(ni58_fendl):
+    """The one LB=4 block on any tape has LT = NP/2, where the old split
+    happened to agree, so this pins that the fix did not move it."""
+    blocks = ni58_fendl.section_data[33, 103]["subsections"][0]["ni_subsections"]
+    ni = blocks[1]
+    assert (ni["LB"], ni["LT"], ni["NP"]) == (4, 21, 42)
+    assert len(ni["Ek"]) == len(ni["El"]) == 21
+    assert list(ni["Ek"]) == list(ni["El"])
+    assert ni["Fk"][0] == -1.0

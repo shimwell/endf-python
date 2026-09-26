@@ -42,10 +42,15 @@ def parse_mf33_subsection(file_obj) -> dict:
         if 0 <= LB <= 4:
             (_, _, LT, LB, NT, NP), values = get_list_record(file_obj)
             subsub = {'LT': LT, 'LB': LB, 'NT': NT, 'NP': NP}
-            k_array = values[:NT - NP]
+            # The first table holds NP - LT pairs and the second LT (ENDF-102
+            # section 33.2.2.2). Splitting at NT - NP is right only when
+            # LT = NP/2: with LT = 0 it put the upper half of the only table
+            # in El/Fl. See issue #25.
+            split = 2*(NP - LT)
+            k_array = values[:split]
             subsub['Ek'] = k_array[::2]
             subsub['Fk'] = k_array[1::2]
-            l_array = values[NT - NP:]
+            l_array = values[split:]
             subsub['El'] = l_array[::2]
             subsub['Fl'] = l_array[1::2]
         elif LB == 5:
