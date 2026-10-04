@@ -307,3 +307,28 @@ def test_the_lb4_block_still_splits_in_half(ni58_fendl):
     assert len(ni["Ek"]) == len(ni["El"]) == 21
     assert list(ni["Ek"]) == list(ni["El"])
     assert ni["Fk"][0] == -1.0
+
+
+# ---------------------------------------------------------------------------
+# LRF=7 resonances are padded to whole six-value lines
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def cl35_rml():
+    return endf.Material(fixture("n-017_Cl_035_mf2.endf.xz"))
+
+
+def test_rml_resonances_step_over_their_padding(cl35_rml):
+    """ENDF/B-VIII.1 Cl35, NCH = 3: each resonance is ER, three widths and two
+    zeros of padding, six values a line (ENDF-102 section 2.2.1.6). Striding by
+    NCH + 1 = 4 read widths and padding as resonance energies."""
+    groups = cl35_rml.section_data[2, 151]["isotopes"][0]["ranges"][0]["spin_groups"]
+    assert len(groups) == 8
+    for group in groups:
+        assert group["NCH"] == 3
+        assert len(group["ER"]) == group["NRS"]
+        assert group["GAM"].shape == (group["NCH"], group["NRS"])
+    first = groups[0]
+    assert list(first["ER"][:3]) == [54932.0, 68236.16, 115098.0]
+    assert list(first["GAM"][:, 0]) == [0.36726, 46.4424, 0.0]

@@ -174,12 +174,16 @@ class RMatrixLimited:
             (*_, NRS, _, NX), values = get_list_record(file_obj)
             spin_group['NRS'] = NRS
             spin_group['NX'] = NX
-            spin_group['ER'] = values[::NCH + 1]
+            # Each resonance is ER followed by its NCH widths, padded with
+            # zeros to a whole number of six-value lines, so the stride is
+            # NCH + 1 rounded up to a multiple of 6 rather than NCH + 1.
+            stride = 6*((NCH + 1 + 5)//6)
+            spin_group['ER'] = values[::stride][:NRS]
 
             # Read widths into a matrix and transpose
             GAM = []
             for j in range(NRS):
-                GAM.append(values[1 + (NCH + 1)*j:(NCH + 1)*(j + 1)])
+                GAM.append(values[stride*j + 1:stride*j + 1 + NCH])
             GAM = np.array(GAM).reshape(NRS, NCH)
             spin_group['GAM'] = GAM.T
 

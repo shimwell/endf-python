@@ -386,8 +386,11 @@ fn parse_r_matrix_limited(reader: &mut Reader) -> Result<RMatrixLimited> {
         let v = &list.values;
         group.nrs = list.cont.l2;
         group.nx = list.cont.n2;
-        let width = nch.max(0) as usize + 1;
+        // Each resonance is ER and its NCH widths padded with zeros to a whole
+        // number of six-value lines, so the stride is NCH + 1 rounded up.
+        let width = (nch.max(0) as usize + 1).div_ceil(6) * 6;
         group.er = column(v, 0, width);
+        group.er.truncate(group.nrs.max(0) as usize);
         // Stored resonance-major; transposed to channel-major here, matching
         // what the Python reader returns.
         let nrs = group.nrs.max(0) as usize;
