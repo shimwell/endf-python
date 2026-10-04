@@ -1,0 +1,22 @@
+[package]
+name = "endf-py"
+description = "Python bindings for the endf crate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+# Must match the module name `#[pymodule]` declares and what Python imports.
+name = "_endf"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+endf = { path = "../endf" }
+# The Python package reads xz-compressed evaluations through
+# `endf.fileutils.open_text`, so the binding does too — otherwise a path that
+# works in one reader fails in the other. Pure Rust, and it stays out of the
+# `endf` crate, which has no dependencies.
+lzma-rs = "0.3"
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py310"] }

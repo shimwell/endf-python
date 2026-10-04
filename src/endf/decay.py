@@ -440,10 +440,25 @@ class Decay:
 
     @property
     def decay_constant(self):
+        # An evaluation may flag a nuclide unstable (NST=0) and still give a
+        # half-life of zero, which means "not evaluated" rather than "decays
+        # instantly" — ENDF/B-VIII.0's Xe136 is one. Dividing by it raised
+        # ZeroDivisionError from inside the expression below. None says the
+        # same thing Chain.from_endf already assumes for these nuclides, which
+        # skips their modes on `half_life.nominal_value != 0.0`. See issue #23.
+        if self.nominal_half_life == 0.0:
+            return None
         if hasattr(self.half_life, 'n'):
             return log(2.) / self.half_life
         mu, sigma = self.half_life
         return ufloat(log(2.) / mu, log(2.) / mu**2 * sigma)
+
+    @property
+    def nominal_half_life(self):
+        """The half-life without its uncertainty, however it is stored."""
+        if hasattr(self.half_life, 'n'):
+            return self.half_life.n
+        return self.half_life[0]
 
     @property
     def decay_energy(self):
@@ -472,6 +487,10 @@ class Decay:
         """
         sources = {}
         name = self.nuclide['name']
+        # Every source rate scales with the decay constant, so a nuclide whose
+        # half-life was never evaluated has no rates to give. See issue #23.
+        if self.decay_constant is None:
+            return sources
         decay_constant = self.decay_constant.n
 
         for particle, spectra in self.spectra.items():

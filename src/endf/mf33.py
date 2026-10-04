@@ -19,7 +19,9 @@ def parse_mf33_subsection(file_obj) -> dict:
             subsub = {'LTY': LTY, 'E1': E1, 'E2': E2, 'NCI': NCI}
             subsub['CI'] = values[::2]
             subsub['XMTI'] = values[1::2]
-            subsection['nc_subsections'].append(subsub)
+            # No append here: the one below runs for both branches. Appending
+            # in this one too put every LTY=0 subsection in the list twice.
+            # See issue #12.
         else:
             (E1, E2, MATS, MTS, _, NEI), values = get_list_record(file_obj)
             subsub = {'LTY': LTY, 'E1': E1, 'E2': E2, 'MATS': MATS,
@@ -40,10 +42,15 @@ def parse_mf33_subsection(file_obj) -> dict:
         if 0 <= LB <= 4:
             (_, _, LT, LB, NT, NP), values = get_list_record(file_obj)
             subsub = {'LT': LT, 'LB': LB, 'NT': NT, 'NP': NP}
-            k_array = values[:NT - NP]
+            # The first table holds NP - LT pairs and the second LT (ENDF-102
+            # section 33.2.2.2). Splitting at NT - NP is right only when
+            # LT = NP/2: with LT = 0 it put the upper half of the only table
+            # in El/Fl. See issue #25.
+            split = 2*(NP - LT)
+            k_array = values[:split]
             subsub['Ek'] = k_array[::2]
             subsub['Fk'] = k_array[1::2]
-            l_array = values[NT - NP:]
+            l_array = values[split:]
             subsub['El'] = l_array[::2]
             subsub['Fl'] = l_array[1::2]
         elif LB == 5:

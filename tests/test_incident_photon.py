@@ -13,13 +13,13 @@ from endf.incident_photon import (
 
 @pytest.fixture
 def h_photoatomic():
-    filename = Path(__file__).with_name('photoat-001_H_000.endf')
+    filename = Path(__file__).with_name('photoat-001_H_000.endf.xz')
     return endf.Material(filename)
 
 
 @pytest.fixture
 def h_relaxation():
-    filename = Path(__file__).with_name('atom-001_H_000.endf')
+    filename = Path(__file__).with_name('atom-001_H_000.endf.xz')
     return endf.Material(filename)
 
 
@@ -129,7 +129,7 @@ def test_from_endf_without_relaxation(h_photoatomic):
 
 
 def test_from_endf_file_path():
-    filename = Path(__file__).with_name('photoat-001_H_000.endf')
+    filename = Path(__file__).with_name('photoat-001_H_000.endf.xz')
     ip = endf.IncidentPhoton.from_endf(filename)
     assert ip.atomic_number == 1
     assert len(ip.reactions) == 8

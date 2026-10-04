@@ -26,7 +26,7 @@ import endf
 from endf.ace import get_metadata
 from endf.fission_energy import FissionEnergyRelease
 
-AM242_GROUND = Path(__file__).with_name("n-095_Am_242_trimmed.endf")
+AM242_GROUND = Path(__file__).with_name("n-095_Am_242_trimmed.endf.xz")
 
 
 @pytest.mark.parametrize("zaid, scheme, name, metastable", [

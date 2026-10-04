@@ -56,10 +56,17 @@ def parse_mf34(file_obj: TextIO, MT: int) -> dict:
             for m in range(NI):
                 (_, _, LS, LB, NT, NE), values = get_list_record(file_obj)
                 subsub['LS'][m] = LS
-                subsub['LB'][m] = LS
+                # LB, not LS. LS is the symmetry flag and LB the covariance
+                # matrix type; they are not interchangeable. See issue #18.
+                subsub['LB'][m] = LB
                 subsub['NT'][m] = NT
                 subsub['NE'][m] = NE
                 subsub['Data'].append(values)
             subsection['subsubsections'].append(subsub)
+
+        # Every record above was read off the stream and then thrown away,
+        # because nothing appended the subsection to the list built for it.
+        # See issue #18.
+        data['subsections'].append(subsection)
 
     return data

@@ -9,13 +9,16 @@ import endf
 
 @pytest.fixture
 def am244():
-    filename = Path(__file__).with_name('n-095_Am_244.endf')
+    filename = Path(__file__).with_name('n-095_Am_244.endf.xz')
     return endf.Material(filename)
 
 
 def test_init_file():
-    filename = Path(__file__).with_name('n-095_Am_244.endf')
-    with open(filename) as fh:
+    # Material accepts an open file object as well as a path. open_text is
+    # what gives one for a compressed fixture; the point of the test is the
+    # file-object branch, not how the file was opened.
+    filename = Path(__file__).with_name('n-095_Am_244.endf.xz')
+    with endf.fileutils.open_text(filename) as fh:
         am244 = endf.Material(fh)
     assert am244.MAT == 9552
 

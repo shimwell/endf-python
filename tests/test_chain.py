@@ -108,7 +108,7 @@ def test_returns_the_same_list_it_was_given():
 def xe136():
     # Trimmed to MF=1 and MF=3, which is all the chain builder reads from a
     # neutron evaluation.
-    return endf.Material(TESTS / 'n-054_Xe_136_trimmed.endf')
+    return endf.Material(TESTS / 'n-054_Xe_136_trimmed.endf.xz')
 
 
 @pytest.mark.parametrize('mt,q', [(103, -6096700.0), (104, -7672500.0),
@@ -138,7 +138,7 @@ def test_reaction_q_is_taken_from_qi(xe136):
 def test_qm_equals_qi_for_the_transmutation_channels_of_a_normal_evaluation():
     """For the channels a chain is built from, the two normally agree, which is
     why reading the wrong one goes unnoticed."""
-    material = endf.Material(TESTS / 'n-095_Am_244.endf')
+    material = endf.Material(TESTS / 'n-095_Am_244.endf.xz')
     for mt in (16, 17, 102):
         data = material.section_data[3, mt]
         assert data['QM'] == data['QI'], mt
@@ -149,7 +149,7 @@ def test_qm_is_zero_for_inelastic_levels():
     discrete level there is no mass change, so QM is zero while QI carries the
     level excitation energy. Those channels do not transmute and so never reach a
     depletion chain, but it shows the two quantities are not interchangeable."""
-    material = endf.Material(TESTS / 'n-095_Am_244.endf')
+    material = endf.Material(TESTS / 'n-095_Am_244.endf.xz')
     for mt in (51, 52, 53):
         data = material.section_data[3, mt]
         assert data['QM'] == 0.0
